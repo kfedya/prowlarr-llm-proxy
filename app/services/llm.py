@@ -142,13 +142,11 @@ class LLMService:
 
     async def parse_items_batch(self, items: list[TorrentItem]) -> list[str]:
         """
-        Parse multiple torrent items sequentially.
+        Parse multiple torrent items in parallel.
         """
-        results = []
-        for item in items:
-            normalized = await self.parse_item(item)
-            results.append(normalized)
-        return results
+        import asyncio
+        tasks = [self.parse_item(item) for item in items]
+        return await asyncio.gather(*tasks)
 
     def clear_cache(self) -> None:
         """Clear the title cache."""
