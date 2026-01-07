@@ -1,5 +1,7 @@
+import gzip
 import structlog
 import httpx
+import brotli
 from fastapi import Request, Response
 
 logger = structlog.get_logger()
@@ -19,6 +21,21 @@ class ProxyService:
         
         logger.info("ProxyService initialized", upstream_url=self._upstream_url)
 
+    def _decompress(self, content: bytes, encoding: str | None) -> str:
+        """Decompress content based on encoding for logging."""
+        try:
+            if encoding == "br":
+                decompressed = brotli.decompress(content)
+                return decompressed.decode("utf-8", errors="replace")
+            elif encoding == "gzip":
+                decompressed = gzip.decompress(content)
+                return decompressed.decode("utf-8", errors="replace")
+            else:
+                return content.decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning("Failed to decompress", encoding=encoding, error=str(e))
+            return f"<binary data, {len(content)} bytes>"
+
     async def proxy_request(self, request: Request) -> Response:
         """
         Proxy a request to upstream with full logging.
@@ -30,10 +47,9 @@ class ProxyService:
         if query_string:
             target_url = f"{target_url}?{query_string}"
 
-        # Prepare headers - pass everything through, but remove compression
+        # Prepare headers - pass everything through as-is
         headers = dict(request.headers)
         headers.pop("host", None)
-        headers.pop("accept-encoding", None)  # Don't accept compressed responses
 
         # Get request body
         body = await request.body()
@@ -58,8 +74,10 @@ class ProxyService:
                 content=body,
             )
 
-            # Log response (now uncompressed)
-            response_body = response.content.decode("utf-8", errors="replace")
+            # Decompress for logging
+            content_encoding = response.headers.get("content-encoding")
+            response_body = self._decompress(response.content, content_encoding)
+            
             logger.info(
                 "<<< RESPONSE",
                 status_code=response.status_code,
@@ -67,6 +85,7 @@ class ProxyService:
                 body_length=len(response_body),
             )
 
+            # Return original compressed response
             return Response(
                 content=response.content,
                 status_code=response.status_code,
