@@ -55,7 +55,7 @@ class ProxyService:
                 content=body,
             )
 
-            # response.content is already decompressed by httpx
+            # httpx auto-decompresses when brotli package is installed
             response_body = response.content.decode("utf-8", errors="replace")
             
             logger.info(
@@ -69,7 +69,6 @@ class ProxyService:
             response_headers = dict(response.headers)
             response_headers.pop("content-encoding", None)
             response_headers.pop("transfer-encoding", None)
-            # Set correct content-length for decompressed content
             response_headers["content-length"] = str(len(response.content))
 
             return Response(
