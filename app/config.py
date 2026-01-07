@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Proxy settings
     proxy_timeout: float = Field(default=60.0, description="Proxy request timeout in seconds")
 
+    # OpenAI settings
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
+    llm_enabled: bool = Field(default=True, description="Enable LLM title parsing")
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

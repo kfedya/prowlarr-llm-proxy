@@ -11,5 +11,9 @@ services:
       - UPSTREAM_URL=http://sonarr:8989
       - PORT=8080
       - PROXY_TIMEOUT=60
+      # OpenAI settings
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4o-mini
+      - LLM_ENABLED=true
     ports:
       - "8585:8080"
