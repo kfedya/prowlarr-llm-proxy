@@ -104,16 +104,20 @@ class LLMService:
             logger.error("Failed to parse title with LLM", error=str(e), raw_title=raw_title[:50])
             return raw_title
 
-    async def parse_titles_batch(self, titles: list[str]) -> list[str]:
+    async def parse_titles_batch(self, titles: list[str], concurrency: int = 10) -> list[str]:
         """
-        Parse multiple titles. Uses individual requests for now,
-        could be optimized with batch API later.
+        Parse multiple titles in parallel for better performance.
         """
-        results = []
-        for title in titles:
-            normalized = await self.parse_title(title)
-            results.append(normalized)
-        return results
+        import asyncio
+        
+        semaphore = asyncio.Semaphore(concurrency)
+        
+        async def parse_with_semaphore(title: str) -> str:
+            async with semaphore:
+                return await self.parse_title(title)
+        
+        tasks = [parse_with_semaphore(title) for title in titles]
+        return await asyncio.gather(*tasks)
 
     def clear_cache(self) -> None:
         """Clear the title cache."""

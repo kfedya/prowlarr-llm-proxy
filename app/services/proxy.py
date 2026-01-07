@@ -74,6 +74,7 @@ class ProxyService:
         """Process Torznab XML response and normalize titles using LLM.
         
         Uses regex to preserve original XML structure - only replaces title text.
+        Processes titles in parallel for better performance.
         """
         if not self._llm_service:
             return xml_content
@@ -86,27 +87,33 @@ class ProxyService:
                 logger.debug("No items found in Torznab response")
                 return xml_content
 
-            logger.info(f"Processing {len(items)} torrent items")
+            logger.info(f"Processing {len(items)} torrent items in parallel")
+
+            # Extract all titles
+            original_titles = []
+            for match in items:
+                title = match.group(2)
+                original_titles.append(title if title and title.strip() else "")
+
+            # Process all titles in parallel
+            normalized_titles = await self._llm_service.parse_titles_batch(original_titles)
 
             # Build replacement map
             replacements: list[tuple[int, int, str]] = []
 
-            for match in items:
-                original_title = match.group(2)
-                if not original_title or original_title.strip() == "":
+            for match, original_title, normalized_title in zip(items, original_titles, normalized_titles):
+                if not original_title:
                     continue
-
-                normalized_title = await self._llm_service.parse_title(original_title)
 
                 if normalized_title != original_title:
                     # Escape XML special characters
-                    normalized_title = (
+                    safe_title = (
                         normalized_title
                         .replace("&", "&amp;")
                         .replace("<", "&lt;")
                         .replace(">", "&gt;")
                     )
-                    new_content = match.group(1) + normalized_title + match.group(3)
+                    new_content = match.group(1) + safe_title + match.group(3)
                     replacements.append((match.start(), match.end(), new_content))
 
                     logger.debug(
