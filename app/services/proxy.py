@@ -18,8 +18,7 @@ TORZNAB_SEARCH_PARAMS = {"t": ["search", "tvsearch", "movie", "music", "book"]}
 # Regex patterns for extracting data from XML items
 ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
 TITLE_TAG_PATTERN = re.compile(r"<title>(.*?)</title>", re.DOTALL)
-DESC_TAG_PATTERN = re.compile(r"<description>(.*?)</description>", re.DOTALL)
-CATEGORY_PATTERN = re.compile(r'category[^>]*>([^<]+)</category', re.DOTALL)
+CATEGORY_PATTERN = re.compile(r'<category>(\d+)</category>', re.DOTALL)
 
 
 class ProxyService:
@@ -76,14 +75,11 @@ class ProxyService:
         return t_param in TORZNAB_SEARCH_PARAMS["t"]
 
     def _extract_item_data(self, item_xml: str) -> TorrentItem:
-        """Extract title, description, and category from an XML item."""
+        """Extract title and category from an XML item."""
         title_match = TITLE_TAG_PATTERN.search(item_xml)
-        desc_match = DESC_TAG_PATTERN.search(item_xml)
         category_match = CATEGORY_PATTERN.search(item_xml)
-        
         return TorrentItem(
             title=title_match.group(1) if title_match else "",
-            description=desc_match.group(1) if desc_match else "",
             category=category_match.group(1) if category_match else "",
         )
 
@@ -150,7 +146,6 @@ class ProxyService:
                     logger.debug(
                         "Title normalized",
                         original=item_data.title[:50],
-                        description=item_data.description[:30] if item_data.description else None,
                         normalized=normalized_title,
                     )
 
