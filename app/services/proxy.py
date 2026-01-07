@@ -1,7 +1,5 @@
-import gzip
 import structlog
 import httpx
-import brotli
 from fastapi import Request, Response
 
 logger = structlog.get_logger()
@@ -17,34 +15,9 @@ class ProxyService:
     ):
         self._upstream_url = upstream_url.rstrip("/")
         self._timeout = timeout
-        # Disable auto-decompression to get raw response
         self._client = httpx.AsyncClient(timeout=timeout)
         
         logger.info("ProxyService initialized", upstream_url=self._upstream_url)
-
-    def _decompress(self, content: bytes, encoding: str | None) -> str:
-        """Decompress content based on encoding for logging."""
-        if not content:
-            return "<empty>"
-            
-        try:
-            if encoding == "br":
-                decompressed = brotli.decompress(content)
-                return decompressed.decode("utf-8", errors="replace")
-            elif encoding == "gzip":
-                decompressed = gzip.decompress(content)
-                return decompressed.decode("utf-8", errors="replace")
-            elif encoding:
-                # Unknown encoding, try as text
-                return content.decode("utf-8", errors="replace")
-            else:
-                return content.decode("utf-8", errors="replace")
-        except Exception as e:
-            # Maybe already decompressed or plain text
-            try:
-                return content.decode("utf-8", errors="replace")
-            except Exception:
-                return f"<binary data, {len(content)} bytes>"
 
     async def proxy_request(self, request: Request) -> Response:
         """
@@ -74,33 +47,35 @@ class ProxyService:
         )
 
         try:
-            # Make raw request without auto-decompression
-            raw_request = self._client.build_request(
+            # httpx auto-decompresses responses
+            response = await self._client.request(
                 method=request.method,
                 url=target_url,
                 headers=headers,
                 content=body,
             )
-            response = await self._client.send(raw_request, stream=True)
-            response_content = await response.aread()
 
-            # Decompress for logging
-            content_encoding = response.headers.get("content-encoding")
-            response_body = self._decompress(response_content, content_encoding)
+            # response.content is already decompressed by httpx
+            response_body = response.content.decode("utf-8", errors="replace")
             
             logger.info(
                 "<<< RESPONSE",
                 status_code=response.status_code,
-                content_encoding=content_encoding,
                 body_preview=response_body[:3000] if len(response_body) > 3000 else response_body,
                 body_length=len(response_body),
             )
 
-            # Return original response
+            # Remove compression headers since httpx already decompressed
+            response_headers = dict(response.headers)
+            response_headers.pop("content-encoding", None)
+            response_headers.pop("transfer-encoding", None)
+            # Set correct content-length for decompressed content
+            response_headers["content-length"] = str(len(response.content))
+
             return Response(
-                content=response_content,
+                content=response.content,
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=response_headers,
             )
 
         except httpx.TimeoutException:

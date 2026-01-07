@@ -16,7 +16,6 @@ pydantic-settings = "^2.7.1"
 openai = "^1.59.5"
 dependency-injector = "^4.45.0"
 structlog = "^24.4.0"
-brotli = "^1.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
