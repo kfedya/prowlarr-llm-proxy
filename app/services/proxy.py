@@ -30,9 +30,10 @@ class ProxyService:
         if query_string:
             target_url = f"{target_url}?{query_string}"
 
-        # Prepare headers - pass everything through as-is
+        # Prepare headers - pass everything through, but remove compression
         headers = dict(request.headers)
         headers.pop("host", None)
+        headers.pop("accept-encoding", None)  # Don't accept compressed responses
 
         # Get request body
         body = await request.body()
@@ -57,12 +58,11 @@ class ProxyService:
                 content=body,
             )
 
-            # Log response
+            # Log response (now uncompressed)
             response_body = response.content.decode("utf-8", errors="replace")
             logger.info(
                 "<<< RESPONSE",
                 status_code=response.status_code,
-                headers=dict(response.headers),
                 body_preview=response_body[:2000] if len(response_body) > 2000 else response_body,
                 body_length=len(response_body),
             )
