@@ -1,6 +1,6 @@
-# Example: Sonarr/Radarr -> Proxy -> Prowlarr
+# Prowlarr → Proxy → Sonarr
 #
-# Point Sonarr/Radarr indexer to: http://proxy:8080
+# In Prowlarr settings, set Sonarr URL to: http://proxy:8080
 
 services:
   proxy:
@@ -8,8 +8,8 @@ services:
     container_name: prowlarr-llm-proxy
     restart: unless-stopped
     environment:
-      - PROWLARR_URL=http://prowlarr:9696
+      - UPSTREAM_URL=http://sonarr:8989
       - PORT=8080
       - PROXY_TIMEOUT=60
     ports:
-      - "8080:8080"
+      - "8585:8080"

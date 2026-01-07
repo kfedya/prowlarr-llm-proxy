@@ -6,27 +6,27 @@ logger = structlog.get_logger()
 
 
 class ProxyService:
-    """Service for proxying requests to Prowlarr with logging."""
+    """Service for proxying requests with logging."""
 
     def __init__(
         self,
-        prowlarr_url: str,
+        upstream_url: str,
         timeout: float,
     ):
-        self._prowlarr_url = prowlarr_url.rstrip("/")
+        self._upstream_url = upstream_url.rstrip("/")
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
         
-        logger.info("ProxyService initialized", prowlarr_url=self._prowlarr_url)
+        logger.info("ProxyService initialized", upstream_url=self._upstream_url)
 
     async def proxy_request(self, request: Request) -> Response:
         """
-        Proxy a request to Prowlarr with full logging.
+        Proxy a request to upstream with full logging.
         """
         path = request.url.path
         query_string = request.url.query
         
-        target_url = f"{self._prowlarr_url}{path}"
+        target_url = f"{self._upstream_url}{path}"
         if query_string:
             target_url = f"{target_url}?{query_string}"
 
@@ -74,7 +74,7 @@ class ProxyService:
             )
 
         except httpx.TimeoutException:
-            logger.error("Request to Prowlarr timed out", path=path)
+            logger.error("Request to upstream timed out", path=path)
             return Response(
                 content='{"error": "Upstream timeout"}',
                 status_code=504,

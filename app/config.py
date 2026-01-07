@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     # Server port
     port: int = Field(default=8080, description="Port to listen on")
 
-    # Prowlarr URL to proxy to
-    prowlarr_url: str = Field(default="http://localhost:9696", description="Prowlarr base URL")
+    # Upstream URL (Sonarr/Radarr) to proxy to
+    upstream_url: str = Field(default="http://localhost:8989", description="Upstream URL to proxy to")
 
     # Proxy settings
     proxy_timeout: float = Field(default=60.0, description="Proxy request timeout in seconds")
