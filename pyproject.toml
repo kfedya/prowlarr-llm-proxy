@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "prowlarr-llm-proxy"
+version = "0.1.0"
+description = "Proxy between Sonarr/Radarr and Prowlarr that uses LLM to parse and transform torrent search results"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.6"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
+httpx = "^0.28.1"
+pydantic = "^2.10.4"
+pydantic-settings = "^2.7.1"
+openai = "^1.59.5"
+dependency-injector = "^4.45.0"
+structlog = "^24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.25.2"
+ruff = "^0.9.2"
+mypy = "^1.14.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+

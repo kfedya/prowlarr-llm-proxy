@@ -1,0 +1,15 @@
+# Example: Sonarr/Radarr -> Proxy -> Prowlarr
+#
+# Point Sonarr/Radarr indexer to: http://proxy:8080
+
+services:
+  proxy:
+    build: .
+    container_name: prowlarr-llm-proxy
+    restart: unless-stopped
+    environment:
+      - PROWLARR_URL=http://prowlarr:9696
+      - PORT=8080
+      - PROXY_TIMEOUT=60
+    ports:
+      - "8080:8080"
