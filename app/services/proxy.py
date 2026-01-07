@@ -8,13 +8,18 @@ from fastapi import Request, Response
 if TYPE_CHECKING:
     from app.services.llm import LLMService
 
+from app.services.llm import TorrentItem
+
 logger = structlog.get_logger()
 
 # Torznab search endpoints that return torrent results
 TORZNAB_SEARCH_PARAMS = {"t": ["search", "tvsearch", "movie", "music", "book"]}
 
-# Regex to find <title>...</title> inside <item>...</item>
-TITLE_PATTERN = re.compile(r"(<item>.*?<title>)(.*?)(</title>.*?</item>)", re.DOTALL)
+# Regex patterns for extracting data from XML items
+ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
+TITLE_TAG_PATTERN = re.compile(r"<title>(.*?)</title>", re.DOTALL)
+DESC_TAG_PATTERN = re.compile(r"<description>(.*?)</description>", re.DOTALL)
+CATEGORY_PATTERN = re.compile(r'category[^>]*>([^<]+)</category', re.DOTALL)
 
 
 class ProxyService:
@@ -70,42 +75,64 @@ class ProxyService:
 
         return t_param in TORZNAB_SEARCH_PARAMS["t"]
 
+    def _extract_item_data(self, item_xml: str) -> TorrentItem:
+        """Extract title, description, and category from an XML item."""
+        title_match = TITLE_TAG_PATTERN.search(item_xml)
+        desc_match = DESC_TAG_PATTERN.search(item_xml)
+        category_match = CATEGORY_PATTERN.search(item_xml)
+        
+        return TorrentItem(
+            title=title_match.group(1) if title_match else "",
+            description=desc_match.group(1) if desc_match else "",
+            category=category_match.group(1) if category_match else "",
+        )
+
     async def _process_torznab_response(self, xml_content: str) -> str:
         """Process Torznab XML response and normalize titles using LLM.
         
+        Extracts title, description, and category for better LLM context.
         Uses regex to preserve original XML structure - only replaces title text.
-        Processes titles in parallel for better performance.
         """
         if not self._llm_service:
             return xml_content
 
         try:
-            # Find all <item>...</item> blocks and extract titles
-            items = list(TITLE_PATTERN.finditer(xml_content))
+            # Find all <item>...</item> blocks
+            item_matches = list(ITEM_PATTERN.finditer(xml_content))
 
-            if not items:
+            if not item_matches:
                 logger.debug("No items found in Torznab response")
                 return xml_content
 
-            logger.info(f"Processing {len(items)} torrent items in parallel")
+            logger.info(f"Processing {len(item_matches)} torrent items")
 
-            # Extract all titles
-            original_titles = []
-            for match in items:
-                title = match.group(2)
-                original_titles.append(title if title and title.strip() else "")
+            # Extract data from all items
+            torrent_items: list[TorrentItem] = []
+            for match in item_matches:
+                item_data = self._extract_item_data(match.group(1))
+                torrent_items.append(item_data)
 
-            # Process all titles in parallel
-            normalized_titles = await self._llm_service.parse_titles_batch(original_titles)
+            # Process all items through LLM
+            normalized_titles = await self._llm_service.parse_items_batch(torrent_items)
 
-            # Build replacement map
-            replacements: list[tuple[int, int, str]] = []
-
-            for match, original_title, normalized_title in zip(items, original_titles, normalized_titles):
-                if not original_title:
+            # Build replacement map - we need to replace titles within items
+            result = xml_content
+            offset = 0
+            
+            for match, item_data, normalized_title in zip(item_matches, torrent_items, normalized_titles):
+                if not item_data.title or normalized_title == item_data.title:
                     continue
 
-                if normalized_title != original_title:
+                # Find the title tag within this item
+                item_start = match.start() + offset
+                item_content = match.group(1)
+                title_match = TITLE_TAG_PATTERN.search(item_content)
+                
+                if title_match:
+                    # Calculate absolute position of title content
+                    title_content_start = item_start + len("<item>") + title_match.start(1)
+                    title_content_end = item_start + len("<item>") + title_match.end(1)
+                    
                     # Escape XML special characters
                     safe_title = (
                         normalized_title
@@ -113,19 +140,19 @@ class ProxyService:
                         .replace("<", "&lt;")
                         .replace(">", "&gt;")
                     )
-                    new_content = match.group(1) + safe_title + match.group(3)
-                    replacements.append((match.start(), match.end(), new_content))
-
+                    
+                    # Replace title
+                    result = result[:title_content_start] + safe_title + result[title_content_end:]
+                    
+                    # Update offset for next iteration
+                    offset += len(safe_title) - len(item_data.title)
+                    
                     logger.debug(
                         "Title normalized",
-                        original=original_title[:50],
+                        original=item_data.title[:50],
+                        description=item_data.description[:30] if item_data.description else None,
                         normalized=normalized_title,
                     )
-
-            # Apply replacements in reverse order to preserve positions
-            result = xml_content
-            for start, end, new_content in reversed(replacements):
-                result = result[:start] + new_content + result[end:]
 
             return result
 

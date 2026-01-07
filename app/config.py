@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", description="OpenAI API key")
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
     llm_enabled: bool = Field(default=True, description="Enable LLM title parsing")
+    max_llm_titles: int = Field(default=50, description="Max titles to process through LLM (0 = unlimited)")
 
     model_config = {
         "env_file": ".env",

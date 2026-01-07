@@ -1,55 +1,78 @@
-import json
-import re
 from openai import AsyncOpenAI
 import structlog
+from dataclasses import dataclass
 
 logger = structlog.get_logger()
 
-SYSTEM_PROMPT = """You are a media title parser. Your task is to parse torrent titles (often in Russian or mixed languages) and convert them to a standardized format that Sonarr/Radarr can understand.
+SYSTEM_PROMPT = """You are a media title parser for Sonarr/Radarr. Parse torrent info and output a clean title that Sonarr can understand.
 
-FORMAT RULES:
+OUTPUT FORMAT (choose based on content type):
 
-1. For REGULAR TV SHOWS with seasons:
-   Format: {Series Name} S{season:02d}E{episode:02d} {quality}
-   Example: "Breaking Bad S05E01-E16 1080p BluRay"
+1. REGULAR TV SHOWS (with seasons):
+   {Series Name} S{season:02d}E{episode:02d} {quality} {source}
+   Example: "Breaking Bad S05E01 1080p BluRay"
+   For ranges: "Breaking Bad S05E01-E16 1080p BluRay"
 
-2. For ANIME with high episode numbers (100+) or no clear season - USE ABSOLUTE NUMBERING:
-   Format: {Series Name} - {episode} {quality}
-   Example: "One Piece - 1123-1155 1080p WEB-DL"
-   Example: "Naruto Shippuden - 450 720p WEB-DL"
+2. ANIME (use absolute episode numbering - NO seasons!):
+   {Series Name} - {episode:03d} {quality} {source}
+   Example: "Attack on Titan - 001 1080p WEB-DL"
+   For ranges: "One Piece - 1123-1155 1080p WEB-DL"
+   
+   IMPORTANT: Anime like One Piece, Naruto, Bleach, Dragon Ball, Attack on Titan, 
+   Demon Slayer, Jujutsu Kaisen, etc. MUST use absolute numbering, NOT S01E01 format!
 
-3. For MOVIES:
-   Format: {Movie Name} ({year}) {quality}
+3. SEASON PACKS (multiple episodes, no specific episode numbers):
+   {Series Name} S{season:02d} {quality} {source}
+   Example: "Breaking Bad S05 1080p BluRay"
+
+4. MOVIES:
+   {Movie Name} ({year}) {quality} {source}
    Example: "Interstellar (2014) 2160p BluRay"
 
-GENERAL RULES:
-- Extract the English title if available, otherwise transliterate Russian to English
-- Quality: 2160p, 1080p, 720p, etc. Include source if clear (BluRay, WEB-DL, HDTV)
-- Remove all extra info like audio tracks, subtitles, release group names
-- For episode ranges use hyphen: E01-E16 or 1123-1155
+RULES:
+- Use English title (extract from Russian if needed, e.g. "Атака титанов / Attack on Titan" → "Attack on Titan")
+- Quality: 2160p, 1080p, 720p, 480p
+- Source: BluRay, WEB-DL, WEBRip, HDTV, DVDRip
+- Remove: audio info, subtitles, release groups, file sizes, years for TV shows
+- For anime season packs without episode numbers, still use absolute format if possible
 
-ANIME DETECTION:
-- One Piece, Naruto, Bleach, Dragon Ball, Attack on Titan, etc. = absolute numbering
-- Episode numbers > 100 with no season = absolute numbering
-- If title has "серия 1123" or similar high numbers = absolute numbering
+EXAMPLES:
 
-Examples:
-Input: "Во все тяжкие / Breaking Bad / Сезон: 5 / Серии: 1-16 из 16 [2012-2013, драма, BDRemux 1080p]"
+Input title: "Во все тяжкие / Breaking Bad / Сезон: 5 / Серии: 1-16 из 16"
+Input description: "BDRemux 1080p, Eng+Rus audio"
 Output: "Breaking Bad S05E01-E16 1080p BluRay"
 
-Input: "Ван-Пис / One Piece [1123-1155 из 1xxx] WEB-DL 1080p"
+Input title: "Ван-Пис / One Piece [1123-1155 из 1xxx]"
+Input description: "WEB-DL 1080p"
 Output: "One Piece - 1123-1155 1080p WEB-DL"
 
-Input: "Наруто: Ураганные хроники / Naruto Shippuuden [серия 450] 720p"
+Input title: "Атака титанов / Shingeki no Kyojin / Сезон 4"
+Input description: "WEB-DL 1080p, полный сезон"
+Output: "Attack on Titan S04 1080p WEB-DL"
+
+Input title: "Наруто: Ураганные хроники [серия 450]"
+Input description: "720p"
 Output: "Naruto Shippuden - 450 720p"
 
-Input: "Игра престолов / Game of Thrones (Сезон 1, Серия 5) [WEB-DL 720p]"
-Output: "Game of Thrones S01E05 720p WEB-DL"
-
-Input: "Интерстеллар / Interstellar (2014) [BDRip 2160p 4K]"
-Output: "Interstellar (2014) 2160p BluRay"
-
 Respond with ONLY the normalized title, nothing else."""
+
+
+@dataclass
+class TorrentItem:
+    """Data extracted from a Torznab item."""
+    title: str
+    description: str = ""
+    category: str = ""
+    size: int = 0
+    
+    def to_prompt(self) -> str:
+        """Format item data for LLM prompt."""
+        parts = [f"Title: {self.title}"]
+        if self.description:
+            parts.append(f"Description: {self.description}")
+        if self.category:
+            parts.append(f"Category: {self.category}")
+        return "\n".join(parts)
 
 
 class LLMService:
@@ -61,22 +84,29 @@ class LLMService:
         self._cache: dict[str, str] = {}
         logger.info("LLMService initialized", model=model)
 
-    async def parse_title(self, raw_title: str) -> str:
+    async def parse_item(self, item: TorrentItem) -> str:
         """
-        Parse a raw torrent title into Sonarr-compatible format.
+        Parse a torrent item into Sonarr-compatible format.
+        Uses title, description, and other metadata for better parsing.
         Returns the normalized title.
         """
+        # Create cache key from all relevant data
+        cache_key = f"{item.title}|{item.description}|{item.category}"
+        
         # Check cache first
-        if raw_title in self._cache:
-            logger.debug("Cache hit for title", raw_title=raw_title[:50])
-            return self._cache[raw_title]
+        if cache_key in self._cache:
+            logger.debug("Cache hit for title", raw_title=item.title[:50])
+            return self._cache[cache_key]
 
         try:
+            # Build prompt with all available info
+            user_prompt = item.to_prompt()
+            
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": raw_title},
+                    {"role": "user", "content": user_prompt},
                 ],
                 max_tokens=150,
                 temperature=0.1,  # Low temperature for consistent output
@@ -86,38 +116,34 @@ class LLMService:
             
             # Basic validation - should not be empty
             if not normalized:
-                logger.warning("LLM returned empty title", raw_title=raw_title[:50])
-                return raw_title
+                logger.warning("LLM returned empty title", raw_title=item.title[:50])
+                return item.title
 
             # Cache the result
-            self._cache[raw_title] = normalized
+            self._cache[cache_key] = normalized
             
             logger.info(
                 "Title parsed",
-                raw=raw_title[:80],
+                raw=item.title[:80],
+                description=item.description[:50] if item.description else None,
                 normalized=normalized,
             )
             
             return normalized
 
         except Exception as e:
-            logger.error("Failed to parse title with LLM", error=str(e), raw_title=raw_title[:50])
-            return raw_title
+            logger.error("Failed to parse title with LLM", error=str(e), raw_title=item.title[:50])
+            return item.title
 
-    async def parse_titles_batch(self, titles: list[str], concurrency: int = 10) -> list[str]:
+    async def parse_items_batch(self, items: list[TorrentItem]) -> list[str]:
         """
-        Parse multiple titles in parallel for better performance.
+        Parse multiple torrent items sequentially.
         """
-        import asyncio
-        
-        semaphore = asyncio.Semaphore(concurrency)
-        
-        async def parse_with_semaphore(title: str) -> str:
-            async with semaphore:
-                return await self.parse_title(title)
-        
-        tasks = [parse_with_semaphore(title) for title in titles]
-        return await asyncio.gather(*tasks)
+        results = []
+        for item in items:
+            normalized = await self.parse_item(item)
+            results.append(normalized)
+        return results
 
     def clear_cache(self) -> None:
         """Clear the title cache."""
