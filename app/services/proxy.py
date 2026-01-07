@@ -1,5 +1,4 @@
 import re
-import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
 import httpx
@@ -14,9 +13,8 @@ logger = structlog.get_logger()
 # Torznab search endpoints that return torrent results
 TORZNAB_SEARCH_PARAMS = {"t": ["search", "tvsearch", "movie", "music", "book"]}
 
-# Register namespaces to preserve original prefixes
-ET.register_namespace("atom", "http://www.w3.org/2005/Atom")
-ET.register_namespace("torznab", "http://torznab.com/schemas/2015/feed")
+# Regex to find <title>...</title> inside <item>...</item>
+TITLE_PATTERN = re.compile(r"(<item>.*?<title>)(.*?)(</title>.*?</item>)", re.DOTALL)
 
 
 class ProxyService:
@@ -73,17 +71,16 @@ class ProxyService:
         return t_param in TORZNAB_SEARCH_PARAMS["t"]
 
     async def _process_torznab_response(self, xml_content: str) -> str:
-        """Process Torznab XML response and normalize titles using LLM."""
+        """Process Torznab XML response and normalize titles using LLM.
+        
+        Uses regex to preserve original XML structure - only replaces title text.
+        """
         if not self._llm_service:
             return xml_content
 
         try:
-            # Parse XML
-            root = ET.fromstring(xml_content)
-
-            # Find all items (torrent results)
-            # Torznab uses RSS format: <channel><item>...</item></channel>
-            items = root.findall(".//item")
+            # Find all <item>...</item> blocks and extract titles
+            items = list(TITLE_PATTERN.finditer(xml_content))
 
             if not items:
                 logger.debug("No items found in Torznab response")
@@ -91,27 +88,40 @@ class ProxyService:
 
             logger.info(f"Processing {len(items)} torrent items")
 
-            # Process each item's title
-            for item in items:
-                title_elem = item.find("title")
-                if title_elem is not None and title_elem.text:
-                    original_title = title_elem.text
-                    normalized_title = await self._llm_service.parse_title(original_title)
+            # Build replacement map
+            replacements: list[tuple[int, int, str]] = []
 
-                    if normalized_title != original_title:
-                        title_elem.text = normalized_title
-                        logger.debug(
-                            "Title normalized",
-                            original=original_title[:50],
-                            normalized=normalized_title,
-                        )
+            for match in items:
+                original_title = match.group(2)
+                if not original_title or original_title.strip() == "":
+                    continue
 
-            # Convert back to XML string
-            return ET.tostring(root, encoding="unicode", xml_declaration=True)
+                normalized_title = await self._llm_service.parse_title(original_title)
 
-        except ET.ParseError as e:
-            logger.error("Failed to parse Torznab XML", error=str(e))
-            return xml_content
+                if normalized_title != original_title:
+                    # Escape XML special characters
+                    normalized_title = (
+                        normalized_title
+                        .replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                    )
+                    new_content = match.group(1) + normalized_title + match.group(3)
+                    replacements.append((match.start(), match.end(), new_content))
+
+                    logger.debug(
+                        "Title normalized",
+                        original=original_title[:50],
+                        normalized=normalized_title,
+                    )
+
+            # Apply replacements in reverse order to preserve positions
+            result = xml_content
+            for start, end, new_content in reversed(replacements):
+                result = result[:start] + new_content + result[end:]
+
+            return result
+
         except Exception as e:
             logger.error("Failed to process Torznab response", error=str(e))
             return xml_content
