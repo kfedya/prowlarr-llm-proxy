@@ -14,6 +14,10 @@ logger = structlog.get_logger()
 # Torznab search endpoints that return torrent results
 TORZNAB_SEARCH_PARAMS = {"t": ["search", "tvsearch", "movie", "music", "book"]}
 
+# Register namespaces to preserve original prefixes
+ET.register_namespace("atom", "http://www.w3.org/2005/Atom")
+ET.register_namespace("torznab", "http://torznab.com/schemas/2015/feed")
+
 
 class ProxyService:
     """Service for proxying requests with logging and optional LLM title parsing."""
