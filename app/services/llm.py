@@ -28,18 +28,26 @@ FORMAT:
 
 FIELD RULES:
 - Name: English title (extract from Russian, e.g. "Атака титанов / Attack on Titan" → "Attack on Titan")
+- Season: (ТВ-1)=S01, (ТВ-2)=S02, [TV]=S01, "Сезон 1"=S01
+- Episodes: "[25 из 25]" means ALL episodes 1-25 → E01-E25 (NOT just E25!)
+  "[12 из 24]" means episodes 1-12 → E01-E12
+  "Серии 1-25" or "1-25 из 25" → E01-E25
 - Quality: 2160p, 1080p, 720p, 480p
 - Source: BluRay, WEB-DL, WEBRip, HDTV, DVDRip (BDRemux/BDRip→BluRay)
 - Video: x264, x265, HEVC, AV1, XviD (if present)
 - HDR: HDR, HDR10, HDR10+, DV (Dolby Vision) - add if present
 - Audio: AAC, AC3, DTS, DTS-HD, TrueHD, FLAC (if present)
-- Languages: Japanese, English, Russian, etc. (JAP→Japanese, RUS→Russian, ENG→English)
-- Subs: "Subs" or "Russian Subs", "English Subs" if subtitle info present
-- Group: Release group at the end after hyphen (SubsPlease, Erai-raws, LostFilm, etc.)
+- Languages: JAP→Japanese, RUS→Russian, ENG→English
+- Subs: "Sub", "+Sub", "RUS(ext)" = Russian Subs; "ENG Sub" = English Subs
+- Group: Release group at the end after hyphen (SubsPlease, Erai-raws, LostFilm, etc.), if none use "NoGroup"
 
 Category 5070 = Anime, 5000 = TV
 
 EXAMPLES:
+
+Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin / Attack on Titan [TV] [25 из 25] [RUS(ext), JAP+Sub] [2013, BDRip] [1080p]"
+Category: 5070
+→ Attack on Titan S01E01-E25 1080p BluRay Japanese Russian Subs-NoGroup
 
 Title: "Атака титанов / Shingeki no Kyojin / Сезон 1 / Серии 1-25 [JAP+RUS] [WEB-DL 1080p x264 AAC] SubsPlease"
 Category: 5070
