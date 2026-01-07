@@ -17,12 +17,16 @@ class ProxyService:
     ):
         self._upstream_url = upstream_url.rstrip("/")
         self._timeout = timeout
+        # Disable auto-decompression to get raw response
         self._client = httpx.AsyncClient(timeout=timeout)
         
         logger.info("ProxyService initialized", upstream_url=self._upstream_url)
 
     def _decompress(self, content: bytes, encoding: str | None) -> str:
         """Decompress content based on encoding for logging."""
+        if not content:
+            return "<empty>"
+            
         try:
             if encoding == "br":
                 decompressed = brotli.decompress(content)
@@ -30,11 +34,17 @@ class ProxyService:
             elif encoding == "gzip":
                 decompressed = gzip.decompress(content)
                 return decompressed.decode("utf-8", errors="replace")
+            elif encoding:
+                # Unknown encoding, try as text
+                return content.decode("utf-8", errors="replace")
             else:
                 return content.decode("utf-8", errors="replace")
         except Exception as e:
-            logger.warning("Failed to decompress", encoding=encoding, error=str(e))
-            return f"<binary data, {len(content)} bytes>"
+            # Maybe already decompressed or plain text
+            try:
+                return content.decode("utf-8", errors="replace")
+            except Exception:
+                return f"<binary data, {len(content)} bytes>"
 
     async def proxy_request(self, request: Request) -> Response:
         """
@@ -59,35 +69,36 @@ class ProxyService:
             ">>> REQUEST",
             method=request.method,
             path=path,
-            query=query_string,
-            target_url=target_url,
-            headers=dict(request.headers),
+            query=query_string or None,
             body=body.decode("utf-8") if body else None,
         )
 
         try:
-            # Make proxied request
-            response = await self._client.request(
+            # Make raw request without auto-decompression
+            raw_request = self._client.build_request(
                 method=request.method,
                 url=target_url,
                 headers=headers,
                 content=body,
             )
+            response = await self._client.send(raw_request, stream=True)
+            response_content = await response.aread()
 
             # Decompress for logging
             content_encoding = response.headers.get("content-encoding")
-            response_body = self._decompress(response.content, content_encoding)
+            response_body = self._decompress(response_content, content_encoding)
             
             logger.info(
                 "<<< RESPONSE",
                 status_code=response.status_code,
-                body_preview=response_body[:2000] if len(response_body) > 2000 else response_body,
+                content_encoding=content_encoding,
+                body_preview=response_body[:3000] if len(response_body) > 3000 else response_body,
                 body_length=len(response_body),
             )
 
-            # Return original compressed response
+            # Return original response
             return Response(
-                content=response.content,
+                content=response_content,
                 status_code=response.status_code,
                 headers=dict(response.headers),
             )
