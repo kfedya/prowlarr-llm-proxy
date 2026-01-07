@@ -19,7 +19,7 @@ class Container(containers.DeclarativeContainer):
     # Services
     proxy_service = providers.Singleton(
         ProxyService,
-        upstream_url=config.provided.upstream_url,
+        routes=config.provided.get_routes,
         timeout=config.provided.proxy_timeout,
     )
 

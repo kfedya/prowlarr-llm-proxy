@@ -20,15 +20,23 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application
 COPY app ./app
+COPY entrypoint.sh ./
+
+RUN chmod +x entrypoint.sh
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PORT=8080 \
-    UPSTREAM_URL=http://localhost:8989
+    PYTHONUNBUFFERED=1
 
-EXPOSE 8080
+# Default: single port mode
+ENV PORT=8080
+ENV UPSTREAM_URL=http://localhost:8989
+
+# Multi-port mode: set ROUTES instead
+# ENV ROUTES='{"8585": "http://sonarr:8989", "8586": "http://prowlarr:9696"}'
+
+EXPOSE 8080 8585 8586
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:${PORT}/health', timeout=5).raise_for_status()"
+    CMD python -c "import httpx; httpx.get('http://localhost:${PORT:-8080}/health', timeout=5).raise_for_status()"
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["./entrypoint.sh"]

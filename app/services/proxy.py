@@ -10,23 +10,54 @@ class ProxyService:
 
     def __init__(
         self,
-        upstream_url: str,
+        routes: dict[int, str],
         timeout: float,
     ):
-        self._upstream_url = upstream_url.rstrip("/")
+        self._routes = {int(k): v.rstrip("/") for k, v in routes.items()}
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
         
-        logger.info("ProxyService initialized", upstream_url=self._upstream_url)
+        logger.info("ProxyService initialized", routes=self._routes)
+
+    def _get_upstream_url(self, request: Request) -> str | None:
+        """Get upstream URL based on request port."""
+        # Try to get port from request
+        port = request.url.port or 80
+        
+        # Check X-Forwarded-Port header (for reverse proxy setups)
+        forwarded_port = request.headers.get("x-forwarded-port")
+        if forwarded_port:
+            try:
+                port = int(forwarded_port)
+            except ValueError:
+                pass
+        
+        # Look up upstream URL
+        upstream = self._routes.get(port)
+        
+        # Fallback to first route if port not found
+        if not upstream and self._routes:
+            upstream = next(iter(self._routes.values()))
+            
+        return upstream
 
     async def proxy_request(self, request: Request) -> Response:
         """
         Proxy a request to upstream with full logging.
         """
+        upstream_url = self._get_upstream_url(request)
+        
+        if not upstream_url:
+            return Response(
+                content='{"error": "No upstream configured"}',
+                status_code=503,
+                media_type="application/json",
+            )
+
         path = request.url.path
         query_string = request.url.query
         
-        target_url = f"{self._upstream_url}{path}"
+        target_url = f"{upstream_url}{path}"
         if query_string:
             target_url = f"{target_url}?{query_string}"
 
@@ -43,11 +74,12 @@ class ProxyService:
             method=request.method,
             path=path,
             query=query_string or None,
+            upstream=upstream_url,
             body=body.decode("utf-8") if body else None,
         )
 
         try:
-            # httpx auto-decompresses responses
+            # httpx auto-decompresses when brotli package is installed
             response = await self._client.request(
                 method=request.method,
                 url=target_url,
@@ -55,7 +87,6 @@ class ProxyService:
                 content=body,
             )
 
-            # httpx auto-decompresses when brotli package is installed
             response_body = response.content.decode("utf-8", errors="replace")
             
             logger.info(
