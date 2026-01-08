@@ -4,69 +4,57 @@ from dataclasses import dataclass
 
 logger = structlog.get_logger()
 
-SYSTEM_PROMPT = """Parse torrent title into Sonarr-compatible format. Keep all technical info!
+SYSTEM_PROMPT = """Parse torrent title into Sonarr-compatible format.
+
+CRITICAL NAME RULE:
+- Use EXACTLY the English name from the title - DO NOT modify, translate, or add words!
+- "Тодзима хочет стать Камен Райдером / Tojima Wants to Be a Kamen Rider" → "Tojima Wants to Be a Kamen Rider"
+- If multiple English names exist, use the SHORTEST common one
+- If NO English name exists, transliterate the romanji/Japanese name as-is
+- NEVER add character names, subtitles, or extra words not in the English title!
 
 FORMAT:
 
 1. TV SHOWS & ANIME (default - use seasons):
    {Name} S{ss}E{ee} {quality} {source} {video} {audio} {languages} {subs}-{group}
-   Example: "Attack on Titan S01E01 1080p WEB-DL x264 AAC Japanese Russian Subs-SubsPlease"
 
-2. ABSOLUTE NUMBERING - ONLY when episode number >= 100:
+2. ABSOLUTE NUMBERING - ONLY when episode >= 100:
    {Name} - {episode} {quality} {source} {video} {audio} {languages}-{group}
-   Example: "One Piece - 1123 1080p WEB-DL x264 AAC Japanese-Erai-raws"
-   
-   USE FOR: episodes 100+, or One Piece, Naruto, Bleach, Dragon Ball, Detective Conan, Fairy Tail
+   USE FOR: One Piece, Naruto, Bleach, Dragon Ball, Detective Conan, Fairy Tail, Gintama
 
-3. SEASON PACK (no specific episodes):
+3. SEASON PACK (full season, no specific episodes):
    {Name} S{ss} {quality} {source} {video} {audio} {languages}-{group}
-   Example: "Breaking Bad S05 1080p BluRay x264 DTS English Russian-SPARKS"
 
 4. MOVIES:
    {Name} ({year}) {quality} {source} {video} {audio} {languages}-{group}
-   Example: "Interstellar (2014) 2160p BluRay x265 DTS-HD English-SPARKS"
 
 FIELD RULES:
-- Name: English title (extract from Russian, e.g. "Атака титанов / Attack on Titan" → "Attack on Titan")
 - Season: (ТВ-1)=S01, (ТВ-2)=S02, [TV]=S01, "Сезон 1"=S01
-- Episodes: "[25 из 25]" means ALL episodes 1-25 → E01-E25 (NOT just E25!)
-  "[12 из 24]" means episodes 1-12 → E01-E12
-  "Серии 1-25" or "1-25 из 25" → E01-E25
-- Quality: 2160p, 1080p, 720p, 480p
-- Source: BluRay, WEB-DL, WEBRip, HDTV, DVDRip (BDRemux/BDRip→BluRay)
-- Video: x264, x265, HEVC, AV1, XviD (if present)
-- HDR: HDR, HDR10, HDR10+, DV (Dolby Vision) - add if present
-- Audio: AAC, AC3, DTS, DTS-HD, TrueHD, FLAC (if present)
+- Episodes: "[25 из 25]"=E01-E25, "[12 из 24]"=E01-E12, "Серии 1-25"=E01-E25
+- Quality: 2160p/1080p/720p/480p
+- Source: BluRay, WEB-DL, WEBRip, HDTV (BDRemux/BDRip→BluRay)
+- Video: x264, x265, HEVC, AV1
+- HDR: HDR, HDR10, HDR10+, DV
+- Audio: AAC, AC3, DTS, DTS-HD, TrueHD
 - Languages: JAP→Japanese, RUS→Russian, ENG→English
-- Subs: "Sub", "+Sub", "RUS(ext)" = Russian Subs; "ENG Sub" = English Subs
-- Group: Release group at the end after hyphen (SubsPlease, Erai-raws, LostFilm, etc.), if none use "NoGroup"
-
-Category 5070 = Anime, 5000 = TV
+- Subs: "+Sub"/"RUS(ext)"→Russian Subs, "ENG Sub"→English Subs
+- Group: at end after hyphen, or "NoGroup"
 
 EXAMPLES:
 
-Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin / Attack on Titan [TV] [25 из 25] [RUS(ext), JAP+Sub] [2013, BDRip] [1080p]"
-Category: 5070
-→ Attack on Titan S01E01-E25 1080p BluRay Japanese Russian Subs-NoGroup
+"Тодзима хочет стать Камен Райдером / Toujima Tanzaburou wa Kamen Rider ni Naritai / Tojima Wants to Be a Kamen Rider [13 из 13] [WEB-DL 1080p] JAP+RUS"
+→ Tojima Wants to Be a Kamen Rider S01E01-E13 1080p WEB-DL Japanese Russian-NoGroup
 
-Title: "Атака титанов / Shingeki no Kyojin / Сезон 1 / Серии 1-25 [JAP+RUS] [WEB-DL 1080p x264 AAC] SubsPlease"
-Category: 5070
-→ Attack on Titan S01E01-E25 1080p WEB-DL x264 AAC Japanese Russian-SubsPlease
+"Атака титанов (ТВ-1) / Shingeki no Kyojin / Attack on Titan [25 из 25] [BDRip 1080p] JAP+Sub"
+→ Attack on Titan S01E01-E25 1080p BluRay Japanese Subs-NoGroup
 
-Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p HEVC JAP+SUB Erai-raws"
-Category: 5070
+"Ван-Пис / One Piece [1123-1155] WEB-DL 1080p HEVC JAP+SUB Erai-raws"
 → One Piece - 1123-1155 1080p WEB-DL HEVC Japanese Subs-Erai-raws
 
-Title: "Клинок, рассекающий демонов / Kimetsu no Yaiba / S03E05 [WEBRip 1080p x264] JAP DUB RUS"
-Category: 5070
-→ Demon Slayer S03E05 1080p WEBRip x264 Japanese Russian-NoGroup
+"Во все тяжкие / Breaking Bad / Сезон 5 [BDRemux 1080p DTS] ENG+RUS LostFilm"
+→ Breaking Bad S05 1080p BluRay DTS English Russian-LostFilm
 
-Title: "Во все тяжкие / Breaking Bad / Сезон 5 [BDRemux 1080p x264 DTS] ENG+RUS LostFilm"
-Category: 5000
-→ Breaking Bad S05 1080p BluRay x264 DTS English Russian-LostFilm
-
-Title: "Интерстеллар / Interstellar (2014) [UHD BDRemux 2160p HDR10 x265 TrueHD] RUS"
-Category: 2000
+"Интерстеллар / Interstellar (2014) [2160p HDR10 x265 TrueHD] RUS"
 → Interstellar (2014) 2160p BluRay HDR10 x265 TrueHD Russian-NoGroup
 
 Output ONLY the normalized title, nothing else."""
