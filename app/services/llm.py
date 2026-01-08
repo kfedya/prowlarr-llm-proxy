@@ -4,58 +4,39 @@ from dataclasses import dataclass
 
 logger = structlog.get_logger()
 
-SYSTEM_PROMPT = """Parse torrent title into Sonarr-compatible format.
+SYSTEM_PROMPT = """Parse torrent title for Sonarr. Output ONLY the normalized title.
 
-CRITICAL NAME RULE:
-- If "Series:" is provided, use EXACTLY that name - this is what Sonarr expects!
-- Otherwise, use the English name from the title WITHOUT modifications
-- NEVER add character names, subtitles, or extra words!
+RULE #1 - NAME (MOST IMPORTANT):
+The "Series:" field contains the EXACT name Sonarr expects. You MUST use it!
+Example: Series: "Attack on Titan" → output starts with "Attack on Titan"
+IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
 
-FORMAT:
+RULE #2 - LANGUAGES:
+- JAP/JAP+Sub → Japanese Subs
+- RUS/RUS(ext) → Russian Subs  
+- JAP+RUS or RUS(ext), JAP+Sub → Japanese Russian Subs
+- ENG → English
 
-1. TV SHOWS & ANIME (default - use seasons):
-   {Name} S{ss}E{ee} {quality} {source} {video} {audio} {languages} {subs}-{group}
+RULE #3 - EPISODES:
+- "[13 из 13]" or "[1-13 из 24]" → E01-E13 (range from 1 to first number)
+- "[TV]" or "(ТВ-1)" → S01
+- "(ТВ-2)" → S02
 
-2. ABSOLUTE NUMBERING - ONLY when episode >= 100:
-   {Name} - {episode} {quality} {source} {video} {audio} {languages}-{group}
-   USE FOR: One Piece, Naruto, Bleach, Dragon Ball, Detective Conan, Fairy Tail, Gintama
-
-3. SEASON PACK (full season, no specific episodes):
-   {Name} S{ss} {quality} {source} {video} {audio} {languages}-{group}
-
-4. MOVIES:
-   {Name} ({year}) {quality} {source} {video} {audio} {languages}-{group}
-
-FIELD RULES:
-- Season: (ТВ-1)=S01, (ТВ-2)=S02, [TV]=S01, "Сезон 1"=S01
-- Episodes: "[25 из 25]"=E01-E25, "[12 из 24]"=E01-E12, "Серии 1-25"=E01-E25
-- Quality: 2160p/1080p/720p/480p
-- Source: BluRay, WEB-DL, WEBRip, HDTV (BDRemux/BDRip→BluRay)
-- Video: x264, x265, HEVC, AV1
-- HDR: HDR, HDR10, HDR10+, DV
-- Audio: AAC, AC3, DTS, DTS-HD, TrueHD
-- Languages: JAP→Japanese, RUS→Russian, ENG→English
-- Subs: "+Sub"/"RUS(ext)"→Russian Subs, "ENG Sub"→English Subs
-- Group: at end after hyphen, or "NoGroup"
+FORMAT: {Series} S{ss}E{ee}-E{ee} {quality} {source} {languages}-{group}
 
 EXAMPLES:
 
-"Тодзима хочет стать Камен Райдером / Toujima Tanzaburou wa Kamen Rider ni Naritai / Tojima Wants to Be a Kamen Rider [13 из 13] [WEB-DL 1080p] JAP+RUS"
-→ Tojima Wants to Be a Kamen Rider S01E01-E13 1080p WEB-DL Japanese Russian-NoGroup
+Title: "Тодзима / Toujima Tanzaburou wa Kamen Rider ni Naritai [1-13 из 24] [RUS(ext), JAP+Sub] [WEB-DL 1080p]"
+Series: Tojima Wants to Be a Kamen Rider
+→ Tojima Wants to Be a Kamen Rider S01E01-E13 1080p WEB-DL Japanese Russian Subs-NoGroup
 
-"Атака титанов (ТВ-1) / Shingeki no Kyojin / Attack on Titan [25 из 25] [BDRip 1080p] JAP+Sub"
+Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
+Series: Attack on Titan
 → Attack on Titan S01E01-E25 1080p BluRay Japanese Subs-NoGroup
 
-"Ван-Пис / One Piece [1123-1155] WEB-DL 1080p HEVC JAP+SUB Erai-raws"
-→ One Piece - 1123-1155 1080p WEB-DL HEVC Japanese Subs-Erai-raws
-
-"Во все тяжкие / Breaking Bad / Сезон 5 [BDRemux 1080p DTS] ENG+RUS LostFilm"
-→ Breaking Bad S05 1080p BluRay DTS English Russian-LostFilm
-
-"Интерстеллар / Interstellar (2014) [2160p HDR10 x265 TrueHD] RUS"
-→ Interstellar (2014) 2160p BluRay HDR10 x265 TrueHD Russian-NoGroup
-
-Output ONLY the normalized title, nothing else."""
+Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB Erai-raws"
+Series: One Piece
+→ One Piece - 1123-1155 1080p WEB-DL Japanese Subs-Erai-raws"""
 
 
 @dataclass
