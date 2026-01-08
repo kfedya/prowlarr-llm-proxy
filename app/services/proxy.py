@@ -74,20 +74,25 @@ class ProxyService:
 
         return t_param in TORZNAB_SEARCH_PARAMS["t"]
 
-    def _extract_item_data(self, item_xml: str) -> TorrentItem:
+    def _extract_item_data(self, item_xml: str, series_name: str = "") -> TorrentItem:
         """Extract title and category from an XML item."""
         title_match = TITLE_TAG_PATTERN.search(item_xml)
         category_match = CATEGORY_PATTERN.search(item_xml)
         return TorrentItem(
             title=title_match.group(1) if title_match else "",
             category=category_match.group(1) if category_match else "",
+            series_name=series_name,
         )
 
-    async def _process_torznab_response(self, xml_content: str) -> str:
+    async def _process_torznab_response(self, xml_content: str, series_name: str = "") -> str:
         """Process Torznab XML response and normalize titles using LLM.
         
         Extracts title, description, and category for better LLM context.
         Uses regex to preserve original XML structure - only replaces title text.
+        
+        Args:
+            xml_content: The XML response from Prowlarr
+            series_name: The series name from Sonarr's search query (q parameter)
         """
         if not self._llm_service:
             return xml_content
@@ -100,12 +105,12 @@ class ProxyService:
                 logger.debug("No items found in Torznab response")
                 return xml_content
 
-            logger.info(f"Processing {len(item_matches)} torrent items")
+            logger.info(f"Processing {len(item_matches)} torrent items", series_name=series_name or "unknown")
 
             # Extract data from all items
             torrent_items: list[TorrentItem] = []
             for match in item_matches:
-                item_data = self._extract_item_data(match.group(1))
+                item_data = self._extract_item_data(match.group(1), series_name=series_name)
                 torrent_items.append(item_data)
 
             # Process all items through LLM
@@ -209,8 +214,11 @@ class ProxyService:
 
             # Process Torznab search responses through LLM
             if is_search and self._llm_enabled and "xml" in response.headers.get("content-type", ""):
-                logger.info("Processing Torznab search response through LLM")
-                response_body = await self._process_torznab_response(response_body)
+                # Extract series name from search query (q parameter)
+                from urllib.parse import unquote
+                series_name = unquote(request.query_params.get("q", ""))
+                logger.info("Processing Torznab search response through LLM", series_name=series_name)
+                response_body = await self._process_torznab_response(response_body, series_name=series_name)
                 response_content = response_body.encode("utf-8")
             else:
                 response_content = response.content

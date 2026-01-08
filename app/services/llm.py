@@ -7,11 +7,9 @@ logger = structlog.get_logger()
 SYSTEM_PROMPT = """Parse torrent title into Sonarr-compatible format.
 
 CRITICAL NAME RULE:
-- Use EXACTLY the English name from the title - DO NOT modify, translate, or add words!
-- "Тодзима хочет стать Камен Райдером / Tojima Wants to Be a Kamen Rider" → "Tojima Wants to Be a Kamen Rider"
-- If multiple English names exist, use the SHORTEST common one
-- If NO English name exists, transliterate the romanji/Japanese name as-is
-- NEVER add character names, subtitles, or extra words not in the English title!
+- If "Series:" is provided, use EXACTLY that name - this is what Sonarr expects!
+- Otherwise, use the English name from the title WITHOUT modifications
+- NEVER add character names, subtitles, or extra words!
 
 FORMAT:
 
@@ -65,12 +63,16 @@ class TorrentItem:
     """Data extracted from a Torznab item."""
     title: str
     category: str = ""
+    series_name: str = ""  # Expected name from Sonarr search query
     
     def to_prompt(self) -> str:
         """Format item data for LLM prompt."""
+        parts = [f"Title: {self.title}"]
+        if self.series_name:
+            parts.append(f"Series: {self.series_name}")
         if self.category:
-            return f"Title: {self.title}\nCategory: {self.category}"
-        return self.title
+            parts.append(f"Category: {self.category}")
+        return "\n".join(parts)
 
 
 class LLMService:
