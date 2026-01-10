@@ -14,11 +14,13 @@ Example: Series: "Golden Kamuy 2nd Season" → "Golden Kamuy - S02"
 Example: Series: "Attack on Titan" → "Attack on Titan"
 IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
 
-RULE #2 - LANGUAGES (short codes at the end):
-- JAP (alone, no +Sub) → [JA]
-- JAP+Sub or JAP+RUS → [JA][RU] ("+Sub" on RuTracker means Russian subtitles!)
-- RUS or RUS(ext) → [RU]
-- ENG → [EN]
+RULE #2 - LANGUAGES (IMPORTANT - check carefully!):
+On RuTracker, "+Sub" ALWAYS means Russian subtitles!
+- "JAP+Sub" or "[JAP+Sub]" → [JA][RU] (Japanese audio + Russian subs)
+- "JAP+RUS" → [JA][RU]
+- "JAP" alone (no +Sub, no +RUS) → [JA]
+- "RUS" or "RUS(ext)" → [RU]
+- "ENG" → [EN]
 
 RULE #3 - SEASON (extract from TITLE, not Series field!):
 - "(S1)" or "(ТВ-1)" or "[TV]" or "1st Season" → S01
