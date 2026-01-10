@@ -29,6 +29,8 @@ RULE #4 - QUALITY (ALWAYS include resolution!):
 - WEB-DL 2160p / 4K → [WEBDL-2160p]
 - BDRip 1080p / Blu-ray 1080p → [Bluray-1080p]
 - BDRip 720p → [Bluray-720p]
+- BDRemux / BD Remux 1080p → [Remux-1080p]
+- BDRemux 2160p / 4K Remux → [Remux-2160p]
 - HDTV 1080p → [HDTV-1080p]
 - HDTV 720p → [HDTV-720p]
 - DVDRip → [DVD]
