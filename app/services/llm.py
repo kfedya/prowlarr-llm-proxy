@@ -7,8 +7,11 @@ logger = structlog.get_logger()
 SYSTEM_PROMPT = """Parse torrent title for Sonarr. Output ONLY the normalized title.
 
 RULE #1 - NAME (MOST IMPORTANT):
-The "Series:" field contains the EXACT name Sonarr expects. You MUST use it!
-Example: Series: "Attack on Titan" → output starts with "Attack on Titan"
+The "Series:" field contains the base name Sonarr expects. Use it BUT:
+- REMOVE season indicators from the name: "S2", "2nd Season", "Season 2", "Part 2", etc.
+- Put the season number in the S{season} field instead
+Example: Series: "Golden Kamuy 2nd Season" → "Golden Kamuy - S02"
+Example: Series: "Attack on Titan" → "Attack on Titan"
 IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
 
 RULE #2 - LANGUAGES (short codes at the end):
@@ -59,7 +62,11 @@ Series: Naruto
 
 Title: "Атака титанов / Shingeki no Kyojin [25 из 25] [BDRemux] [JAP+RUS]"
 Series: Attack on Titan
-→ Attack on Titan - S01E01-E25 - Bluray.1080p.Remux [JA][RU]"""
+→ Attack on Titan - S01E01-E25 - Bluray.1080p.Remux [JA][RU]
+
+Title: "Золотое божество 2 / Golden Kamuy 2nd Season [12 из 12] [WEB-DL 1080p] [JAP+Sub]"
+Series: Golden Kamuy 2nd Season
+→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA]"""
 
 
 @dataclass
