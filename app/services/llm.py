@@ -29,14 +29,15 @@ RULE #4 - QUALITY (ALWAYS include resolution!):
 - WEB-DL 2160p / 4K → [WEBDL-2160p]
 - BDRip 1080p / Blu-ray 1080p → [Bluray-1080p]
 - BDRip 720p → [Bluray-720p]
-- BDRemux / BD Remux 1080p → [Remux-1080p]
-- BDRemux 2160p / 4K Remux → [Remux-2160p]
+- BDRemux / BD Remux 1080p → Bluray.1080p.Remux (NO brackets!)
+- BDRemux 2160p / 4K Remux → Bluray.2160p.Remux (NO brackets!)
 - HDTV 1080p → [HDTV-1080p]
 - HDTV 720p → [HDTV-720p]
 - DVDRip → [DVD]
 - If resolution unknown, assume 1080p
 
 FORMAT: {Series Title} - S{season}E{episode}-E{episode} - [Quality][Language]
+For Remux: {Series Title} - S{season} - Bluray.1080p.Remux [Language]
 
 EXAMPLES:
 
@@ -54,7 +55,11 @@ Series: One Piece
 
 Title: "Наруто / Naruto [TV] [720p] [JAP+RUS]"
 Series: Naruto
-→ Naruto - S01 - [HDTV-720p][JA][RU]"""
+→ Naruto - S01 - [HDTV-720p][JA][RU]
+
+Title: "Атака титанов / Shingeki no Kyojin [25 из 25] [BDRemux] [JAP+RUS]"
+Series: Attack on Titan
+→ Attack on Titan - S01E01-E25 - Bluray.1080p.Remux [JA][RU]"""
 
 
 @dataclass
