@@ -58,11 +58,11 @@ Series: Tojima Wants to Be a Kamen Rider
 
 Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
 Series: Attack on Titan
-→ Attack on Titan - S01E01-E25 - [Bluray-1080p][JA]
+→ Attack on Titan - S01E01-E25 - [Bluray-1080p][JA][RU]
 
 Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
 Series: One Piece
-→ One Piece - 1123-1155 - [WEBDL-1080p][JA]
+→ One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]
 
 Title: "Наруто / Naruto [TV] [720p] [JAP+RUS]"
 Series: Naruto
@@ -74,7 +74,7 @@ Series: Attack on Titan
 
 Title: "Золотое божество 2 / Golden Kamuy 2nd Season [12 из 12] [WEB-DL 1080p] [JAP+Sub]"
 Series: Golden Kamuy 2nd Season
-→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA]"""
+→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA][RU]"""
 
 
 @dataclass
