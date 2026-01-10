@@ -15,9 +15,9 @@ Example: Series: "Attack on Titan" → "Attack on Titan"
 IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
 
 RULE #2 - LANGUAGES (short codes at the end):
-- JAP/JAP+Sub → [JA]
-- RUS/RUS(ext) → [RU]
-- JAP+RUS or RUS(ext), JAP+Sub → [JA][RU]
+- JAP (alone, no +Sub) → [JA]
+- JAP+Sub or JAP+RUS → [JA][RU] ("+Sub" on RuTracker means Russian subtitles!)
+- RUS or RUS(ext) → [RU]
 - ENG → [EN]
 
 RULE #3 - SEASON (extract from TITLE, not Series field!):
