@@ -11,32 +11,38 @@ The "Series:" field contains the EXACT name Sonarr expects. You MUST use it!
 Example: Series: "Attack on Titan" → output starts with "Attack on Titan"
 IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
 
-RULE #2 - LANGUAGES:
-- JAP/JAP+Sub → Japanese Subs
-- RUS/RUS(ext) → Russian Subs  
-- JAP+RUS or RUS(ext), JAP+Sub → Japanese Russian Subs
-- ENG → English
+RULE #2 - LANGUAGES (short codes at the end):
+- JAP/JAP+Sub → [JA]
+- RUS/RUS(ext) → [RU]
+- JAP+RUS or RUS(ext), JAP+Sub → [JA][RU]
+- ENG → [EN]
 
 RULE #3 - EPISODES:
-- "[13 из 13]" or "[1-13 из 24]" → E01-E13 (range from 1 to first number)
+- "[13 из 13]" or "[1-13 из 24]" → S01E01-E13 (range from 1 to first number)
 - "[TV]" or "(ТВ-1)" → S01
 - "(ТВ-2)" → S02
+- "[1123-1155]" (absolute numbers, no "из") → 1123-1155 (no S/E prefix)
 
-FORMAT: {Series} S{ss}E{ee}-E{ee} {quality} {source} {languages}-{group}
+RULE #4 - QUALITY (in brackets):
+- WEB-DL 1080p → [WEB-DL-1080p]
+- BDRip 1080p → [BluRay-1080p]
+- HDTV 720p → [HDTV-720p]
+
+FORMAT: {Series Title} - S{season}E{episode}-E{episode} - [Quality][Language]
 
 EXAMPLES:
 
 Title: "Тодзима / Toujima Tanzaburou wa Kamen Rider ni Naritai [1-13 из 24] [RUS(ext), JAP+Sub] [WEB-DL 1080p]"
 Series: Tojima Wants to Be a Kamen Rider
-→ Tojima Wants to Be a Kamen Rider S01E01-E13 1080p WEB-DL Japanese Russian Subs-NoGroup
+→ Tojima Wants to Be a Kamen Rider - S01E01-E13 - [WEB-DL-1080p][JA][RU]
 
 Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
 Series: Attack on Titan
-→ Attack on Titan S01E01-E25 1080p BluRay Japanese Subs-NoGroup
+→ Attack on Titan - S01E01-E25 - [BluRay-1080p][JA]
 
-Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB Erai-raws"
+Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
 Series: One Piece
-→ One Piece - 1123-1155 1080p WEB-DL Japanese Subs-Erai-raws"""
+→ One Piece - 1123-1155 - [WEB-DL-1080p][JA]"""
 
 
 @dataclass
@@ -95,6 +101,10 @@ class LLMService:
             if not normalized:
                 logger.warning("LLM returned empty title", raw_title=item.title[:50])
                 return item.title
+
+            # Add [RUS] suffix if original title ends with RUS (from Prowlarr)
+            if item.title.rstrip().upper().endswith("RUS"):
+                normalized = f"{normalized}[RUS]"
 
             # Cache the result
             self._cache[item.title] = normalized
