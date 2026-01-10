@@ -20,13 +20,17 @@ RULE #2 - LANGUAGES (short codes at the end):
 - JAP+RUS or RUS(ext), JAP+Sub → [JA][RU]
 - ENG → [EN]
 
-RULE #3 - EPISODES:
-- "[13 из 13]" or "[1-13 из 24]" → S01E01-E13 (range from 1 to first number)
-- "[TV]" or "(ТВ-1)" → S01
-- "(ТВ-2)" → S02
+RULE #3 - SEASON (extract from TITLE, not Series field!):
+- "(S1)" or "(ТВ-1)" or "[TV]" or "1st Season" → S01
+- "(S2)" or "(ТВ-2)" or "2nd Season" or "2" after title → S02
+- "(S3)" or "(ТВ-3)" or "3rd Season" or "3" after title → S03
+- "(S4)", "(S5)", etc. → S04, S05, etc.
+
+RULE #4 - EPISODES:
+- "[13 из 13]" or "[1-13 из 24]" → E01-E13 (range from 1 to first number)
 - "[1123-1155]" (absolute numbers, no "из") → 1123-1155 (no S/E prefix)
 
-RULE #4 - QUALITY (ALWAYS include resolution!):
+RULE #5 - QUALITY (ALWAYS include resolution!):
 - WEB-DL 1080p / WEBRip 1080p → [WEBDL-1080p]
 - WEB-DL 720p / WEBRip 720p → [WEBDL-720p]
 - WEB-DL 2160p / 4K → [WEBDL-2160p]
