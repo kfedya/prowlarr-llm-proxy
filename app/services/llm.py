@@ -29,8 +29,10 @@ RULE #3 - SEASON (extract from TITLE, not Series field!):
 - "(S4)", "(S5)", etc. → S04, S05, etc.
 
 RULE #4 - EPISODES:
-- "[13 из 13]" or "[1-13 из 24]" → E01-E13 (range from 1 to first number)
-- "[1123-1155]" (absolute numbers, no "из") → 1123-1155 (no S/E prefix)
+- "[12 из 12]" or "[E12 of 12]" → E01-E12 (FULL season, range from 1 to the number!)
+- "[1-13 из 24]" → E01-E13 (partial season)
+- "[E1 of 13]" → E01 (single episode, ongoing series)
+- "[1123-1155]" (absolute numbers, no "из/of") → 1123-1155 (no S/E prefix)
 
 RULE #5 - QUALITY (ALWAYS include resolution!):
 - WEB-DL 1080p / WEBRip 1080p → [WEBDL-1080p]
