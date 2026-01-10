@@ -1,0 +1,445 @@
+---
+id: rutracker-org-login
+name: RuTracker.org [Login]
+description: "RuTracker.org - Custom indexer with full category support for Sonarr/Radarr (username/password)"
+language: ru-RU
+type: semi-private
+encoding: windows-1251
+links:
+  - https://rutracker.org/
+
+caps:
+  categorymappings:
+    # Movies
+    - {id: 22, cat: Movies, desc: "Наше кино"}
+    - {id: 941, cat: Movies, desc: "|- Кино СССР"}
+    - {id: 1666, cat: Movies, desc: "|- Детские отечественные фильмы"}
+    - {id: 376, cat: Movies, desc: "|- Авторские дебюты"}
+    - {id: 106, cat: Movies, desc: "|- Фильмы России и СССР на национальных языках [без перевода]"}
+    - {id: 7, cat: MoviesForeign, desc: "Зарубежное кино"}
+    - {id: 187, cat: MoviesForeign, desc: "|- Классика мирового кинематографа"}
+    - {id: 2090, cat: MoviesForeign, desc: "|- Фильмы до 1990 года"}
+    - {id: 2221, cat: MoviesForeign, desc: "|- Фильмы 1991-2000"}
+    - {id: 2091, cat: MoviesForeign, desc: "|- Фильмы 2001-2005"}
+    - {id: 2092, cat: MoviesForeign, desc: "|- Фильмы 2006-2010"}
+    - {id: 2093, cat: MoviesForeign, desc: "|- Фильмы 2011-2015"}
+    - {id: 2200, cat: MoviesForeign, desc: "|- Фильмы 2016-2020"}
+    - {id: 1950, cat: MoviesForeign, desc: "|- Фильмы 2021-2023"}
+    - {id: 252, cat: MoviesForeign, desc: "|- Фильмы 2024"}
+    - {id: 2540, cat: MoviesForeign, desc: "|- Фильмы Ближнего Зарубежья"}
+    - {id: 934, cat: MoviesForeign, desc: "|- Азиатские фильмы"}
+    - {id: 505, cat: MoviesForeign, desc: "|- Индийское кино"}
+    - {id: 212, cat: MoviesForeign, desc: "|- Сборники фильмов"}
+    - {id: 2459, cat: MoviesForeign, desc: "|- Короткий метр"}
+    - {id: 1235, cat: MoviesForeign, desc: "|- Грайндхаус"}
+    - {id: 166, cat: MoviesForeign, desc: "|- Зарубежные фильмы без перевода"}
+    - {id: 124, cat: MoviesOther, desc: "Арт-хаус и авторское кино"}
+    - {id: 1543, cat: MoviesOther, desc: "|- Короткий метр (Арт-хаус и авторское кино)"}
+    - {id: 709, cat: MoviesOther, desc: "|- Документальные фильмы (Арт-хаус и авторское кино)"}
+    - {id: 1577, cat: MoviesOther, desc: "|- Анимация (Арт-хаус и авторское кино)"}
+    - {id: 93, cat: MoviesDVD, desc: "DVD Video"}
+    - {id: 905, cat: MoviesDVD, desc: "|- Классика мирового кинематографа (DVD Video)"}
+    - {id: 101, cat: MoviesDVD, desc: "|- Зарубежное кино (DVD Video)"}
+    - {id: 100, cat: MoviesDVD, desc: "|- Наше кино (DVD Video)"}
+    - {id: 877, cat: MoviesDVD, desc: "|- Фильмы Ближнего Зарубежья (DVD Video)"}
+    - {id: 1576, cat: MoviesDVD, desc: "|- Азиатские фильмы (DVD Video)"}
+    - {id: 572, cat: MoviesDVD, desc: "|- Арт-хаус и авторское кино (DVD Video)"}
+    - {id: 2220, cat: MoviesDVD, desc: "|- Индийское кино (DVD Video)"}
+    - {id: 1670, cat: MoviesDVD, desc: "|- Грайндхаус (DVD Video)"}
+    - {id: 2198, cat: MoviesHD, desc: "HD Video"}
+    - {id: 2199, cat: MoviesHD, desc: "|- Классика мирового кинематографа (HD Video)"}
+    - {id: 313, cat: MoviesHD, desc: "|- Зарубежное кино (HD Video)"}
+    - {id: 312, cat: MoviesHD, desc: "|- Наше кино (HD Video)"}
+    - {id: 1247, cat: MoviesHD, desc: "|- Фильмы Ближнего Зарубежья (HD Video)"}
+    - {id: 2201, cat: MoviesHD, desc: "|- Азиатские фильмы (HD Video)"}
+    - {id: 2339, cat: MoviesHD, desc: "|- Арт-хаус и авторское кино (HD Video)"}
+    - {id: 140, cat: MoviesHD, desc: "|- Индийское кино (HD Video)"}
+    - {id: 194, cat: MoviesHD, desc: "|- Грайндхаус (HD Video)"}
+    - {id: 718, cat: MoviesUHD, desc: "UHD Video"}
+    - {id: 775, cat: MoviesUHD, desc: "|- Классика мирового кинематографа (UHD Video)"}
+    - {id: 1457, cat: MoviesUHD, desc: "|- Зарубежное кино (UHD Video)"}
+    - {id: 1940, cat: MoviesUHD, desc: "|- Наше кино (UHD Video)"}
+    - {id: 272, cat: MoviesUHD, desc: "|- Азиатские фильмы (UHD Video)"}
+    - {id: 271, cat: MoviesUHD, desc: "|- Арт-хаус и авторское кино (UHD Video)"}
+    - {id: 352, cat: Movies3D, desc: "3D/Стерео Кино, Видео, TV и Спорт"}
+    - {id: 549, cat: Movies3D, desc: "|- 3D Кинофильмы"}
+    - {id: 1213, cat: Movies3D, desc: "|- 3D Мультфильмы"}
+    - {id: 2109, cat: Movies3D, desc: "|- 3D Документальные фильмы"}
+    - {id: 514, cat: Movies3D, desc: "|- 3D Спорт"}
+    - {id: 2097, cat: Movies3D, desc: "|- 3D Ролики, Музыкальное видео, Трейлеры к фильмам"}
+    - {id: 4, cat: Movies, desc: "Мультфильмы"}
+    - {id: 84, cat: MoviesUHD, desc: "|- Мультфильмы (UHD Video)"}
+    - {id: 2343, cat: MoviesHD, desc: "|- Отечественные мультфильмы (HD Video)"}
+    - {id: 930, cat: MoviesHD, desc: "|- Иностранные мультфильмы (HD Video)"}
+    - {id: 2365, cat: MoviesHD, desc: "|- Иностранные короткометражные мультфильмы (HD Video)"}
+    - {id: 1900, cat: MoviesDVD, desc: "|- Отечественные мультфильмы (DVD)"}
+    - {id: 2258, cat: MoviesDVD, desc: "|- Иностранные короткометражные мультфильмы (DVD)"}
+    - {id: 521, cat: MoviesDVD, desc: "|- Иностранные мультфильмы (DVD)"}
+    - {id: 208, cat: Movies, desc: "|- Отечественные мультфильмы"}
+    - {id: 539, cat: Movies, desc: "|- Отечественные полнометражные мультфильмы"}
+    - {id: 2183, cat: MoviesForeign, desc: "|- Мультфильмы Ближнего Зарубежья"}
+    - {id: 209, cat: MoviesForeign, desc: "|- Иностранные мультфильмы"}
+    - {id: 484, cat: MoviesForeign, desc: "|- Иностранные короткометражные мультфильмы"}
+    - {id: 822, cat: Movies, desc: "|- Сборники мультфильмов"}
+    - {id: 181, cat: Movies, desc: "|- Мультфильмы без перевода"}
+    
+    # TV Series
+    - {id: 9, cat: TV, desc: "Русские сериалы"}
+    - {id: 81, cat: TVHD, desc: "|- Русские сериалы (HD Video)"}
+    - {id: 920, cat: TVSD, desc: "|- Русские сериалы (DVD Video)"}
+    - {id: 189, cat: TVForeign, desc: "Зарубежные сериалы"}
+    - {id: 842, cat: TVForeign, desc: "|- Новинки и сериалы в стадии показа"}
+    - {id: 235, cat: TVForeign, desc: "|- Сериалы США и Канады"}
+    - {id: 242, cat: TVForeign, desc: "|- Сериалы Великобритании и Ирландии"}
+    - {id: 819, cat: TVForeign, desc: "|- Скандинавские сериалы"}
+    - {id: 1531, cat: TVForeign, desc: "|- Испанские сериалы"}
+    - {id: 721, cat: TVForeign, desc: "|- Итальянские сериалы"}
+    - {id: 1102, cat: TVForeign, desc: "|- Европейские сериалы"}
+    - {id: 1120, cat: TVForeign, desc: "|- Сериалы стран Африки, Ближнего и Среднего Востока"}
+    - {id: 1214, cat: TVForeign, desc: "|- Сериалы Австралии и Новой Зеландии"}
+    - {id: 489, cat: TVForeign, desc: "|- Сериалы Ближнего Зарубежья"}
+    - {id: 387, cat: TVForeign, desc: "|- Сериалы совместного производства нескольких стран"}
+    - {id: 1359, cat: TVForeign, desc: "|- Веб-сериалы, Вебизоды к сериалам и Пилотные серии сериалов"}
+    - {id: 2366, cat: TVHD, desc: "Зарубежные сериалы (HD Video)"}
+    - {id: 119, cat: TVUHD, desc: "|- Зарубежные сериалы (UHD Video)"}
+    - {id: 1803, cat: TVHD, desc: "|- Новинки и сериалы в стадии показа (HD Video)"}
+    - {id: 266, cat: TVHD, desc: "|- Сериалы США и Канады (HD Video)"}
+    - {id: 193, cat: TVHD, desc: "|- Сериалы Великобритании и Ирландии (HD Video)"}
+    - {id: 1690, cat: TVHD, desc: "|- Скандинавские сериалы (HD Video)"}
+    - {id: 1459, cat: TVHD, desc: "|- Европейские сериалы (HD Video)"}
+    - {id: 1463, cat: TVHD, desc: "|- Сериалы стран Африки, Ближнего и Среднего Востока (HD Video)"}
+    - {id: 825, cat: TVHD, desc: "|- Сериалы Австралии и Новой Зеландии (HD Video)"}
+    - {id: 1248, cat: TVHD, desc: "|- Сериалы Ближнего Зарубежья (HD Video)"}
+    - {id: 1288, cat: TVHD, desc: "|- Сериалы совместного производства нескольких стран (HD Video)"}
+    - {id: 911, cat: TVForeign, desc: "Сериалы Латинской Америки, Турции и Индии"}
+    - {id: 325, cat: TVForeign, desc: "|- Сериалы Аргентины"}
+    - {id: 534, cat: TVForeign, desc: "|- Сериалы Бразилии"}
+    - {id: 594, cat: TVForeign, desc: "|- Сериалы Венесуэлы"}
+    - {id: 1301, cat: TVForeign, desc: "|- Сериалы Индии"}
+    - {id: 607, cat: TVForeign, desc: "|- Сериалы Колумбии"}
+    - {id: 1574, cat: TVForeign, desc: "|- Сериалы Латинской Америки с озвучкой (раздачи папками)"}
+    - {id: 1539, cat: TVForeign, desc: "|- Сериалы Латинской Америки с субтитрами"}
+    - {id: 694, cat: TVForeign, desc: "|- Сериалы Мексики"}
+    - {id: 781, cat: TVForeign, desc: "|- Сериалы совместного производства"}
+    - {id: 704, cat: TVForeign, desc: "|- Сериалы Турции"}
+    - {id: 1537, cat: TVForeign, desc: "|- Для некондиционных раздач"}
+    - {id: 2100, cat: TVForeign, desc: "Азиатские сериалы"}
+    - {id: 820, cat: TVForeign, desc: "|- Азиатские сериалы (UHD Video)"}
+    - {id: 915, cat: TVForeign, desc: "|- Корейские сериалы"}
+    - {id: 1242, cat: TVForeign, desc: "|- Корейские сериалы (HD Video)"}
+    - {id: 717, cat: TVForeign, desc: "|- Китайские сериалы"}
+    - {id: 1939, cat: TVForeign, desc: "|- Японские сериалы"}
+    - {id: 2412, cat: TVForeign, desc: "|- Сериалы Таиланда, Индонезии, Сингапура"}
+    - {id: 921, cat: TV, desc: "Мультсериалы"}
+    - {id: 815, cat: TVSD, desc: "|- Мультсериалы (SD Video)"}
+    - {id: 816, cat: TVHD, desc: "|- Мультсериалы (DVD Video)"}
+    - {id: 1460, cat: TVHD, desc: "|- Мультсериалы (HD Video)"}
+    - {id: 498, cat: TVUHD, desc: "|- Мультсериалы (UHD Video)"}
+    
+    # Anime
+    - {id: 33, cat: TV/Anime, desc: "Аниме"}
+    - {id: 1106, cat: TV/Anime, desc: "|- Онгоинги (HD Video)"}
+    - {id: 1105, cat: TV/Anime, desc: "|- Аниме (HD Video)"}
+    - {id: 599, cat: TV/Anime, desc: "|- Аниме (DVD)"}
+    - {id: 1389, cat: TV/Anime, desc: "|- Аниме (основной подраздел)"}
+    - {id: 1391, cat: TV/Anime, desc: "|- Аниме (плеерный подраздел)"}
+    - {id: 2491, cat: TV/Anime, desc: "|- Аниме (QC подраздел)"}
+    - {id: 2544, cat: TV/Anime, desc: "|- Ван-Пис"}
+    - {id: 1642, cat: TV/Anime, desc: "|- Гандам"}
+    - {id: 1390, cat: TV/Anime, desc: "|- Наруто"}
+    - {id: 404, cat: TV/Anime, desc: "|- Покемоны"}
+    - {id: 893, cat: TV/Anime, desc: "|- Японские мультфильмы"}
+    - {id: 809, cat: Audio, desc: "|- Звуковые дорожки (Аниме)"}
+    - {id: 2484, cat: TV/Anime, desc: "|- Артбуки и журналы (Аниме)"}
+    - {id: 1386, cat: TV/Anime, desc: "|- Обои, сканы, аватары, арт"}
+    - {id: 1387, cat: TV/Anime, desc: "|- AMV и другие ролики"}
+    
+    # Documentary
+    - {id: 19, cat: TV/Documentary, desc: "СМИ"}
+    - {id: 46, cat: TV/Documentary, desc: "Документальные фильмы и телепередачи"}
+    - {id: 103, cat: TV/Documentary, desc: "|- Документальные (DVD)"}
+    - {id: 314, cat: TV/Documentary, desc: "Документальные (HD Video)"}
+    
+    # Sport
+    - {id: 255, cat: TV/Sport, desc: "Спортивные турниры, фильмы и передачи"}
+    - {id: 256, cat: TV/Sport, desc: "|- Автоспорт"}
+    - {id: 1986, cat: TV/Sport, desc: "|- Мотоспорт"}
+    - {id: 660, cat: TV/Sport, desc: "|- Формула-1 (2024)"}
+    - {id: 1608, cat: TV/Sport, desc: "⚽ Футбол"}
+    - {id: 2004, cat: TV/Sport, desc: "🏀 Баскетбол"}
+    - {id: 2009, cat: TV/Sport, desc: "🏒 Хоккей"}
+    - {id: 550, cat: TV/Sport, desc: "|- Теннис"}
+    
+    # Music
+    - {id: 1200, cat: Audio, desc: "Музыка"}
+    - {id: 1201, cat: Audio, desc: "|- Поп-музыка"}
+    - {id: 1202, cat: Audio, desc: "|- Рок-музыка"}
+    - {id: 1203, cat: Audio, desc: "|- Электронная музыка"}
+    - {id: 1204, cat: Audio, desc: "|- Рэп и хип-хоп"}
+    - {id: 1205, cat: Audio, desc: "|- Джаз и блюз"}
+    - {id: 1206, cat: Audio, desc: "|- Классическая музыка"}
+    - {id: 1207, cat: Audio, desc: "|- Саундтреки"}
+    
+    # Books
+    - {id: 21, cat: Books, desc: "Книги и журналы (общий раздел)"}
+    - {id: 31, cat: BooksMags, desc: "|- Журналы и газеты (общий раздел)"}
+    - {id: 1101, cat: Books, desc: "Для детей, родителей и учителей"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+  allowrawsearch: true
+
+settings:
+  - name: username
+    type: text
+    label: Username
+  - name: password
+    type: password
+    label: Password
+  - name: stripcyrillic
+    type: checkbox
+    label: Strip Cyrillic Letters
+    default: false
+  - name: addrussiantotitle
+    type: checkbox
+    label: Add RUS to end of all titles
+    default: false
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: 1
+    options:
+      1: created
+      10: seeders
+      7: size
+      2: title
+  - name: type
+    type: select
+    label: Order requested from site
+    default: 2
+    options:
+      2: desc
+      1: asc
+
+login:
+  path: forum/login.php
+  method: post
+  inputs:
+    login_username: "{{ .Config.username }}"
+    login_password: "{{ .Config.password }}"
+    login: "Login"
+    redirect: "index.php"
+  error:
+    - selector: h4.warnColor1
+    - selector: div.msg-main
+  test:
+    path: forum/index.php
+    selector: "#logged-in-username"
+
+search:
+  paths:
+    - path: forum/tracker.php
+  inputs:
+    $raw: "{{ if .Categories }}{{ range .Categories }}f[]={{.}}&{{end}}{{ else }}f[]=-1{{ end }}"
+    o: "{{ .Config.sort }}"
+    s: "{{ .Config.type }}"
+    tm: -1
+    sns: -1
+    nm: "{{ .Keywords }}"
+
+  keywordsfilters:
+    - name: diacritics
+      args: replace
+    - name: re_replace
+      args: ["(?i)\\bS0*(\\d+)E0*(\\d+)\\b", ""]
+    - name: re_replace
+      args: ["(?i)\\bS0*(\\d+)\\b", ""]
+    - name: re_replace
+      args: ["(?i)\\bE0*(\\d+)\\b", ""]
+
+  rows:
+    selector: tr.tCenter.hl-tr:has(a.tr-dl)
+
+  fields:
+    category:
+      selector: a.gen[href*="tracker.php?f="]
+      attribute: href
+      filters:
+        - name: querystring
+          args: f
+    title:
+      selector: a.tLink
+      filters:
+        # Normalize Unicode dash characters to standard dash
+        - name: re_replace
+          args: ["\\p{Pd}", "-"]
+        # Replace double 4K quality in title
+        - name: re_replace
+          args: ["(?i)\\b(2160p), 4K\\b", "$1"]
+        # TV Series: Replace comma-separated episode numbers with dash
+        - name: re_replace
+          args: ["\\s(\\d+),(\\d+)", " $1-$2"]
+        # TV Series: Replace Cyrillic X with XX
+        - name: re_replace
+          args: ["([\\s-])Х+([\\s\\)\\]])", "$1XX$2"]
+        # TV Series: Russian Season/Episode patterns
+        - name: re_replace
+          args: ["Сезон\\s*[:]*\\s+(\\d+).+(?:Серии|Эпизод|Выпуски)+\\s*[:]*\\s+(\\d+(?:-\\d+)?)\\s*из\\s*([\\w?])", "S$1E$2 of $3"]
+        - name: re_replace
+          args: ["Сезон\\s*[:]*\\s+(\\d+).+(?:Серии|Эпизод|Выпуски)+\\s*[:]*\\s+(\\d+(?:-\\d+)?)", "S$1E$2"]
+        - name: re_replace
+          args: ["Сезон\\s*[:]*\\s+(\\d+(?:-\\d+)?)", "S$1"]
+        - name: re_replace
+          args: ["(?:Серии|Эпизод|Выпуски)+\\s*[:]*\\s+(\\d+(?:-\\d+)?)\\s*из\\s*([\\w?])", "E$1 of $2"]
+        - name: re_replace
+          args: ["(?:Серии|Эпизод|Выпуски)+\\s*[:]*\\s+(\\d+(?:-\\d+)?)", "E$1"]
+        # Anime: ТВ-(number) -> S(number)
+        - name: re_replace
+          args: ["ТВ[-]*(?:(\\d+))", "S$1"]
+        # Anime: [number из number] -> E(number) of (number)
+        - name: re_replace
+          args: ["\\[(\\d+(?:\\+\\d+)?)\\s+из\\s+(\\d+(?:\\+\\d+)?)\\]", "E$1 of $2"]
+        # Movies: Blu-ray Disc -> BR-DISK
+        - name: re_replace
+          args: ["(?i)\\bBlu-ray Disc\\b", "BR-DISK"]
+        # Remove director's name from title (for Movies and TV)
+        - name: re_replace
+          args: ["(\\([\\p{IsCyrillic}\\W]+)(?:\\s/\\s(.+?))?\\)", ""]
+        # Remove VO, MVO and DVO from titles
+        - name: re_replace
+          args: ["((?:\\dx\\s)?(?:[A-Z])?VO\\s\\(.+?\\))", ""]
+        # Remove R5 and (R5) from release names
+        - name: re_replace
+          args: ["(.*)(.R5.)(.*)", "$1"]
+        # Remove Sub languages from release names
+        - name: re_replace
+          args: ["(\\bSub\\b[^+]*\\b|\\b[\\+]*Sub[\\+]*\\b)", ""]
+        # Add RUS to title if configured (handled by append filter below)
+        # Strip Cyrillic letters if configured
+        - name: re_replace
+          args: ["(\\([\\p{IsCyrillic}\\W]+\\))|(^[\\p{IsCyrillic}\\W\\d]+\\/ )|([\\p{IsCyrillic} \\-]+,+)|([\\p{IsCyrillic}]+)", "{{ if .Config.stripcyrillic }}{{ else }}$1$2$3$4{{ end }}"]
+        # Remove empty brackets and parentheses
+        - name: re_replace
+          args: ["[\\[\\(\\{<«][\\s\\W]*[\\]\\)\\}>»]", ""]
+        # Remove leading special characters
+        - name: re_replace
+          args: ["^[\\s&,\\.!\\?\\+\\-_\\|\\/':]+", ""]
+        # Fix quality names
+        - name: re_replace
+          args: ["(?i)\\b-Rip\\b", "Rip"]
+        - name: re_replace
+          args: ["(?i)\\bHDTVRip\\b", "HDTV"]
+        - name: re_replace
+          args: ["(?i)\\bWEB-DLRip\\b", "WEB-DL"]
+        - name: re_replace
+          args: ["(?i)\\bWEBDLRip\\b", "WEB-DL"]
+        - name: re_replace
+          args: ["(?i)\\bWEBDL\\b", "WEB-DL"]
+        - name: re_replace
+          args: ["(?i)\\bHDTV[-\\s]?Rip\\b", "HDTV"]
+        - name: re_replace
+          args: ["(?i)\\bWEB[-\\s]?DL[-\\s]?Rip\\b", "WEB-DL"]
+        - name: re_replace
+          args: ["(?i)\\bWEB\\sRip\\b", "WEBRip"]
+        - name: re_replace
+          args: ["(?i)\\bWEB\\sDL\\b", "WEB-DL"]
+        # Replace Кураж-Бамбей with kurazh
+        - name: re_replace
+          args: ["(?i)\\bКураж-Бамбей\\b", "kurazh"]
+        # Fix parentheses formatting
+        - name: re_replace
+          args: ["\\(\\s*\\/\\s*", "("]
+        - name: re_replace
+          args: ["\\s*\\/\\s*\\)", ")"]
+        # Remove multiple plus signs
+        - name: re_replace
+          args: ["\\s+\\+(?:\\s+\\+)+\\s+", " + "]
+        # Replace multiple spaces with single space
+        - name: re_replace
+          args: ["\\s+", " "]
+        # Add [RuTracker] prefix if not present
+        - name: re_replace
+          args: ["^(?!\\[)", "[RuTracker] "]
+        # Remove [TV] tag
+        - name: re_replace
+          args: ["\\s*\\[TV\\]\\s*", " "]
+        # Fix RUS tag format
+        - name: re_replace
+          args: ["\\[RUS\\((?:ext|int)\\),?\\s*", "[RUS "]
+        # Anime: Fix episode format [number из number] -> - number
+        - name: re_replace
+          args: ["\\[(\\d+(?:-\\d+)?)\\s+из\\s+(?:\\d+|[ХхXx]+)\\]", "- $1"]
+        # Anime: ТВ-(number) -> S0(number)
+        - name: re_replace
+          args: ["\\(ТВ-(\\d+)\\)", "S0$1"]
+        - name: re_replace
+          args: ["ТВ-(\\d+)", "S0$1"]
+        # Fix S0(number) -> S(number) for numbers >= 10
+        - name: re_replace
+          args: ["S0(\\d{2,})", "S$1"]
+        # Append RUS if configured
+        - name: append
+          args: "{{ if .Config.addrussiantotitle }} RUS{{ else }}{{ end }}"
+    details:
+      selector: a.tLink
+      attribute: href
+    download:
+      selector: a.tr-dl
+      attribute: href
+    size:
+      selector: td.tor-size
+      attribute: data-ts_text
+    seeders:
+      selector: td b.seedmed
+      optional: true
+      default: 0
+      filters:
+        - name: regexp
+          args: "([0-9]+)"
+    leechers:
+      selector: td.leechmed
+      optional: true
+      default: 0
+      filters:
+        - name: regexp
+          args: "([0-9]+)"
+    grabs:
+      selector: td:nth-child(9)
+      optional: true
+      default: 0
+      filters:
+        - name: regexp
+          args: "([0-9]+)"
+    date:
+      selector: td:last-child
+      filters:
+        - name: append
+          args: " +03:00"
+        - name: dateparse
+          args: "2-Jan-06 15:04 -07:00"
+    downloadvolumefactor:
+      case:
+        img[src*="gold"]: 0
+        img[src*="silver"]: 0.5
+        "*": 1
+    uploadvolumefactor:
+      text: 1
+
+# КРИТИЧЕСКИ ВАЖНО: Эта секция преобразует поля seeders/leechers в Torznab формат для Sonarr
+torznabResponse:
+  item:
+    attributes:
+      seeders:
+        path: seeders
+        value: number
+      leechers:
+        path: leechers
+        value: number
+      grabs:
+        path: grabs
+        value: number
+

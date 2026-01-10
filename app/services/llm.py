@@ -23,10 +23,16 @@ RULE #3 - EPISODES:
 - "(ТВ-2)" → S02
 - "[1123-1155]" (absolute numbers, no "из") → 1123-1155 (no S/E prefix)
 
-RULE #4 - QUALITY (in brackets):
-- WEB-DL 1080p → [WEB-DL-1080p]
-- BDRip 1080p → [BluRay-1080p]
+RULE #4 - QUALITY (ALWAYS include resolution!):
+- WEB-DL 1080p / WEBRip 1080p → [WEBDL-1080p]
+- WEB-DL 720p / WEBRip 720p → [WEBDL-720p]
+- WEB-DL 2160p / 4K → [WEBDL-2160p]
+- BDRip 1080p / Blu-ray 1080p → [Bluray-1080p]
+- BDRip 720p → [Bluray-720p]
+- HDTV 1080p → [HDTV-1080p]
 - HDTV 720p → [HDTV-720p]
+- DVDRip → [DVD]
+- If resolution unknown, assume 1080p
 
 FORMAT: {Series Title} - S{season}E{episode}-E{episode} - [Quality][Language]
 
@@ -34,15 +40,19 @@ EXAMPLES:
 
 Title: "Тодзима / Toujima Tanzaburou wa Kamen Rider ni Naritai [1-13 из 24] [RUS(ext), JAP+Sub] [WEB-DL 1080p]"
 Series: Tojima Wants to Be a Kamen Rider
-→ Tojima Wants to Be a Kamen Rider - S01E01-E13 - [WEB-DL-1080p][JA][RU]
+→ Tojima Wants to Be a Kamen Rider - S01E01-E13 - [WEBDL-1080p][JA][RU]
 
 Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
 Series: Attack on Titan
-→ Attack on Titan - S01E01-E25 - [BluRay-1080p][JA]
+→ Attack on Titan - S01E01-E25 - [Bluray-1080p][JA]
 
 Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
 Series: One Piece
-→ One Piece - 1123-1155 - [WEB-DL-1080p][JA]"""
+→ One Piece - 1123-1155 - [WEBDL-1080p][JA]
+
+Title: "Наруто / Naruto [TV] [720p] [JAP+RUS]"
+Series: Naruto
+→ Naruto - S01 - [HDTV-720p][JA][RU]"""
 
 
 @dataclass

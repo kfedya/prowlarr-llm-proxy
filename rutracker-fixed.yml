@@ -1,0 +1,199 @@
+id: rutracker-org-anime-login
+name: RuTracker.org (Anime) [Login]
+description: "RuTracker.org - Custom indexer with anime episode parsing for Sonarr (username/password)"
+language: ru-RU
+type: semi-private
+encoding: windows-1251
+links:
+  - https://rutracker.org/
+
+caps:
+  categorymappings:
+    # Аниме категории RuTracker.org (из официального C# кода)
+    - {id: 33, cat: TV/Anime, desc: "Аниме"}
+    - {id: 1106, cat: TV/Anime, desc: "Онгоинги (HD Video)"}
+    - {id: 1105, cat: TV/Anime, desc: "Аниме (HD Video)"}
+    - {id: 599, cat: TV/Anime, desc: "Аниме (DVD)"}
+    - {id: 1389, cat: TV/Anime, desc: "Аниме (основной подраздел)"}
+    - {id: 1391, cat: TV/Anime, desc: "Аниме (плеерный подраздел)"}
+    - {id: 2491, cat: TV/Anime, desc: "Аниме (QC подраздел)"}
+    - {id: 2544, cat: TV/Anime, desc: "Ван-Пис"}
+    - {id: 1642, cat: TV/Anime, desc: "Гандам"}
+    - {id: 1390, cat: TV/Anime, desc: "Наруто"}
+    - {id: 404, cat: TV/Anime, desc: "Покемоны"}
+    - {id: 893, cat: TV/Anime, desc: "Японские мультфильмы"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+  allowrawsearch: true
+
+settings:
+  - name: username
+    type: text
+    label: Username
+  - name: password
+    type: password
+    label: Password
+  - name: stripcyrillic
+    type: checkbox
+    label: Strip Cyrillic Letters
+    default: false
+  - name: addrussiantotitle
+    type: checkbox
+    label: Add RUS to end of all titles
+    default: false
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: 1
+    options:
+      1: created
+      10: seeders
+      7: size
+      2: title
+  - name: type
+    type: select
+    label: Order requested from site
+    default: 2
+    options:
+      2: desc
+      1: asc
+
+login:
+  path: forum/login.php
+  method: post
+  inputs:
+    login_username: "{{ .Config.username }}"
+    login_password: "{{ .Config.password }}"
+    login: "Login"
+    redirect: "index.php"
+  error:
+    - selector: h4.warnColor1
+    - selector: div.msg-main
+  test:
+    path: forum/index.php
+    selector: "#logged-in-username"
+
+search:
+  paths:
+    - path: forum/tracker.php
+  inputs:
+    $raw: "{{ if .Categories }}{{ range .Categories }}f[]={{.}}&{{end}}{{ else }}f[]=-1{{ end }}"
+    o: "{{ .Config.sort }}"
+    s: "{{ .Config.type }}"
+    tm: -1
+    sns: -1
+    nm: "{{ .Keywords }}"
+
+  keywordsfilters:
+    - name: diacritics
+      args: replace
+    # For anime: remove S01E02, S01, E01 from search (anime uses absolute numbering)
+    - name: re_replace
+      args: ["(?i)\\bS0*(\\d+)E0*(\\d+)\\b", ""]
+    - name: re_replace
+      args: ["(?i)\\bS0*(\\d+)\\b", ""]
+    - name: re_replace
+      args: ["(?i)\\bE0*(\\d+)\\b", ""]
+
+  rows:
+    selector: tr.tCenter.hl-tr:has(a.tr-dl)
+
+  fields:
+    category:
+      selector: a.gen[href*="tracker.php?f="]
+      attribute: href
+      filters:
+        - name: querystring
+          args: f
+    title:
+      selector: a.tLink
+      filters:
+        # ===== SEASON PARSING =====
+        # (ТВ-7) -> S07 | (ТВ-1) -> S01
+        - name: re_replace
+          args: ["\\(ТВ-(\\d+)\\)", "S0$1"]
+        # ТВ-7 без скобок -> S07
+        - name: re_replace
+          args: ["ТВ-(\\d+)", "S0$1"]
+        # S07 -> S07 (убираем лишний 0 если S010+)
+        - name: re_replace
+          args: ["S0(\\d{2,})", "S$1"]
+        # ===== EPISODE PARSING =====
+        # [01 из xx] -> - 01 | [1000-1050 из xxx] -> - 1000-1050
+        - name: re_replace
+          args: ["\\[(\\d+(?:-\\d+)?)\\s+из\\s+(?:\\d+|[ХхXx]+)\\]", "- $1"]
+        # Add [RuTracker] at the beginning only if no [SubGroup] exists
+        - name: re_replace
+          args: ["^(?!\\[)", "[RuTracker] "]
+        # Remove [TV] tag that interferes with Sonarr parsing
+        - name: re_replace
+          args: ["\\s*\\[TV\\]\\s*", " "]
+        # Clean up [RUS(ext), JAP+Sub] -> [RUS JAP] (remove parentheses and commas inside brackets)
+        - name: re_replace
+          args: ["\\[RUS\\((?:ext|int)\\),?\\s*", "[RUS "]
+        # ===== END ANIME PARSING =====
+        # Normalize video formats
+        - name: re_replace
+          args: ["(?i)\\bHDTV[-\\s]?Rip\\b", "HDTV"]
+        - name: re_replace
+          args: ["(?i)\\bWEB[-\\s]?DL[-\\s]?Rip\\b", "WEB-DL"]
+        - name: re_replace
+          args: ["(?i)\\bWEB\\sRip\\b", "WEBRip"]
+        - name: re_replace
+          args: ["(?i)\\bWEB\\sDL\\b", "WEB-DL"]
+        # Strip Cyrillic if enabled
+        - name: re_replace
+          args: ["(\\([\\p{IsCyrillic}\\W]+\\))|(^[\\p{IsCyrillic}\\W\\d]+\\/ )|([\\p{IsCyrillic} \\-]+,+)|([\\p{IsCyrillic}]+)", "{{ if .Config.stripcyrillic }}{{ else }}$1$2$3$4{{ end }}"]
+        # Clean up empty brackets
+        - name: re_replace
+          args: ["[\\[\\(\\{<«][\\s\\W]*[\\]\\)\\}>»]", ""]
+        - name: re_replace
+          args: ["^[\\s&,\\.!\\?\\+\\-_\\|\\/':]+", ""]
+        - name: append
+          args: "{{ if .Config.addrussiantotitle }} RUS{{ else }}{{ end }}"
+    details:
+      selector: a.tLink
+      attribute: href
+    download:
+      selector: a.tr-dl
+      attribute: href
+    size:
+      selector: td.tor-size
+      attribute: data-ts_text
+    seeders:
+      selector: td.seedmed b
+    leechers:
+      selector: td.leechmed b
+    grabs:
+      selector: td:nth-child(9)
+    date:
+      selector: td:last-child
+      filters:
+        - name: append
+          args: " +03:00"
+        - name: dateparse
+          args: "2-Jan-06 15:04 -07:00"
+    downloadvolumefactor:
+      case:
+        img[src*="gold"]: 0
+        img[src*="silver"]: 0.5
+        "*": 1
+    uploadvolumefactor:
+      text: 1
+
+# КРИТИЧЕСКИ ВАЖНО: Эта секция преобразует поля seeders/leechers в Torznab формат
+torznabResponse:
+  item:
+    attributes:
+      seeders:
+        path: seeders
+        value: number
+      leechers:
+        path: leechers
+        value: number
+      grabs:
+        path: grabs
+        value: number
+
