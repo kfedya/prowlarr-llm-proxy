@@ -1,8 +1,15 @@
+import asyncio
 from openai import AsyncOpenAI
 import structlog
 from dataclasses import dataclass
 
 logger = structlog.get_logger()
+
+# Rate limiting settings
+MAX_CONCURRENT_REQUESTS = 5  # Max parallel requests to OpenAI
+REQUEST_DELAY = 0.3  # Delay between requests in seconds
+MAX_RETRIES = 3  # Max retries on rate limit error
+RETRY_BASE_DELAY = 2.0  # Base delay for exponential backoff
 
 SYSTEM_PROMPT = """Parse torrent title for Sonarr. Output ONLY the normalized title.
 
@@ -114,64 +121,99 @@ class LLMService:
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
         self._cache: dict[str, str] = {}
-        logger.info("LLMService initialized", model=model)
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        logger.info("LLMService initialized", model=model, max_concurrent=MAX_CONCURRENT_REQUESTS)
 
     async def parse_item(self, item: TorrentItem) -> str:
         """
         Parse a torrent item into Sonarr-compatible format.
         Returns the normalized title.
+        Uses semaphore for rate limiting and retries on 429 errors.
         """
         # Check cache first (key is just the title)
         if item.title in self._cache:
             logger.debug("Cache hit for title", raw_title=item.title[:50])
             return self._cache[item.title]
 
-        try:
-            # Build prompt with all available info
-            user_prompt = item.to_prompt()
-            
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_tokens=150,
-                temperature=0.1,  # Low temperature for consistent output
-            )
+        # Use semaphore to limit concurrent requests
+        async with self._semaphore:
+            for attempt in range(MAX_RETRIES):
+                try:
+                    # Build prompt with all available info
+                    user_prompt = item.to_prompt()
+                    
+                    response = await self._client.chat.completions.create(
+                        model=self._model,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        max_tokens=150,
+                        temperature=0.1,  # Low temperature for consistent output
+                    )
 
-            normalized = response.choices[0].message.content.strip()
-            
-            # Basic validation - should not be empty
-            if not normalized:
-                logger.warning("LLM returned empty title", raw_title=item.title[:50])
-                return item.title
+                    normalized = response.choices[0].message.content.strip()
+                    
+                    # Basic validation - should not be empty
+                    if not normalized:
+                        logger.warning("LLM returned empty title", raw_title=item.title[:50])
+                        return item.title
 
-            # Add [RUS] suffix if original title ends with RUS (from Prowlarr)
-            if item.title.rstrip().upper().endswith("RUS"):
-                normalized = f"{normalized}[RUS]"
+                    # Add [RUS] suffix if original title ends with RUS (from Prowlarr)
+                    if item.title.rstrip().upper().endswith("RUS"):
+                        normalized = f"{normalized}[RUS]"
 
-            # Cache the result
-            self._cache[item.title] = normalized
-            
-            logger.info(
-                "Title parsed",
-                raw=item.title[:80],
-                normalized=normalized,
-            )
-            
-            return normalized
+                    # Cache the result
+                    self._cache[item.title] = normalized
+                    
+                    logger.info(
+                        "Title parsed",
+                        raw=item.title[:80],
+                        normalized=normalized,
+                    )
+                    
+                    return normalized
 
-        except Exception as e:
-            logger.error("Failed to parse title with LLM", error=str(e), raw_title=item.title[:50])
+                except Exception as e:
+                    error_str = str(e)
+                    # Check if it's a rate limit error (429)
+                    if "429" in error_str or "rate_limit" in error_str.lower():
+                        delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                        logger.warning(
+                            "Rate limit hit, retrying",
+                            attempt=attempt + 1,
+                            max_retries=MAX_RETRIES,
+                            delay=delay,
+                            raw_title=item.title[:50],
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    
+                    logger.error("Failed to parse title with LLM", error=error_str, raw_title=item.title[:50])
+                    return item.title
+            
+            # All retries exhausted
+            logger.error("All retries exhausted for title", raw_title=item.title[:50])
             return item.title
 
     async def parse_items_batch(self, items: list[TorrentItem]) -> list[str]:
         """
-        Parse multiple torrent items in parallel.
+        Parse multiple torrent items with rate limiting.
+        Uses semaphore to limit concurrency and adds delay between task starts.
         """
-        import asyncio
-        tasks = [self.parse_item(item) for item in items]
+        async def parse_with_delay(item: TorrentItem, index: int) -> str:
+            # Stagger the start of requests to avoid burst
+            await asyncio.sleep(index * REQUEST_DELAY)
+            return await self.parse_item(item)
+        
+        logger.info(
+            "Starting batch parse",
+            total_items=len(items),
+            max_concurrent=MAX_CONCURRENT_REQUESTS,
+            request_delay=REQUEST_DELAY,
+        )
+        
+        tasks = [parse_with_delay(item, i) for i, item in enumerate(items)]
         return await asyncio.gather(*tasks)
 
     def clear_cache(self) -> None:
