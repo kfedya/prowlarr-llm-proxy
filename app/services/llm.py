@@ -28,11 +28,16 @@ RULE #3 - SEASON (extract from TITLE, not Series field!):
 - "(S3)" or "(ТВ-3)" or "3rd Season" or "3" after title → S03
 - "(S4)", "(S5)", etc. → S04, S05, etc.
 
-RULE #4 - EPISODES:
-- "[12 из 12]" or "[E12 of 12]" → E01-E12 (FULL season, range from 1 to the number!)
-- "[1-13 из 24]" → E01-E13 (partial season)
-- "[E1 of 13]" → E01 (single episode, ongoing series)
-- "[1123-1155]" (absolute numbers, no "из/of") → 1123-1155 (no S/E prefix)
+RULE #4 - EPISODES (CRITICAL - read carefully!):
+SEASON PACK detection: "[N of N]" or "[N из N]" where BOTH numbers are the SAME = FULL SEASON!
+- "[12 of 12]" or "[12 из 12]" → E01-E12 (FULL season pack! Start from E01!)
+- "[13 of 13]" or "[13 из 13]" → E01-E13 (FULL season pack! Start from E01!)
+- "[E13 of 13]" → E01-E13 (FULL season! The "E13" just means total episodes = 13)
+- "[24 из 24]" → E01-E24 (FULL season pack!)
+- "[1-13 из 24]" → E01-E13 (partial season, explicit range)
+- "[E1 of 13]" → E01 (single episode - first number is 1, second is total)
+- "[1123-1155]" (absolute numbers for long anime, no "of/из") → 1123-1155 (no S/E prefix)
+WARNING: "[E13 of 13]" does NOT mean "only episode 13"! It means "complete season of 13 episodes" → E01-E13
 
 RULE #5 - QUALITY (ALWAYS include resolution!):
 - WEB-DL 1080p / WEBRip 1080p → [WEBDL-1080p]
@@ -74,7 +79,15 @@ Series: Attack on Titan
 
 Title: "Золотое божество 2 / Golden Kamuy 2nd Season [12 из 12] [WEB-DL 1080p] [JAP+Sub]"
 Series: Golden Kamuy 2nd Season
-→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA][RU]"""
+→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA][RU]
+
+Title: "Непутёвый ученик в школе магии (S3) / Mahouka Koukou no Rettousei 3rd Season [TV] [E13 of 13] [RUS(int), JAP+Sub] [2024, WEBRip 1080p]"
+Series: The Irregular at Magic High School
+→ The Irregular at Magic High School - S03E01-E13 - [WEBDL-1080p][JA][RU]
+
+Title: "Моя геройская академия (ТВ-7) / Boku no Hero Academia 7th Season [E21 of 21] [JAP+Sub] [WEB-DL 1080p]"
+Series: My Hero Academia
+→ My Hero Academia - S07E01-E21 - [WEBDL-1080p][JA][RU]"""
 
 
 @dataclass
