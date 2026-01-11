@@ -6,10 +6,10 @@ from dataclasses import dataclass
 logger = structlog.get_logger()
 
 # Rate limiting settings
-MAX_CONCURRENT_REQUESTS = 5  # Max parallel requests to OpenAI
-REQUEST_DELAY = 0.3  # Delay between requests in seconds
-MAX_RETRIES = 3  # Max retries on rate limit error
-RETRY_BASE_DELAY = 2.0  # Base delay for exponential backoff
+MAX_CONCURRENT_REQUESTS = 3  # Max parallel requests to OpenAI (reduced to avoid rate limits)
+REQUEST_DELAY = 0.5  # Delay between requests in seconds
+MAX_RETRIES = 2  # Max retries on rate limit error
+RETRY_BASE_DELAY = 1.0  # Base delay for exponential backoff (1s, 2s)
 
 SYSTEM_PROMPT = """Parse torrent title for Sonarr. Output ONLY the normalized title.
 
