@@ -14,13 +14,15 @@ RETRY_BASE_DELAY = 1.5  # Base delay for exponential backoff
 SYSTEM_PROMPT = """Parse torrent titles for Sonarr. You will receive multiple titles numbered [1], [2], etc.
 Output ONLY normalized titles, one per line, in the same order: 1: result, 2: result, etc.
 
-RULE #1 - NAME (MOST IMPORTANT):
-The "Series:" field contains the base name Sonarr expects. Use it BUT:
-- REMOVE season indicators from the name: "S2", "2nd Season", "Season 2", "Part 2", etc.
-- Put the season number in the S{season} field instead
-Example: Series: "Golden Kamuy 2nd Season" → "Golden Kamuy - S02"
-Example: Series: "Attack on Titan" → "Attack on Titan"
-IGNORE all other names in the title (Russian, Japanese, romanji) - use ONLY Series field!
+RULE #1 - NAME (CRITICAL - follow EXACTLY):
+You MUST use the "Series:" field name as-is! DO NOT extract name from the torrent title!
+- The Series field = exact name Sonarr expects
+- Remove season from Series name: "Golden Kamuy 2nd Season" → "Golden Kamuy"
+- NEVER use Russian names (Непутёвый ученик...)
+- NEVER use Japanese romanji (Mahouka, Shingeki...)
+- ONLY use the Series field!
+Example: Series: "The Irregular at Magic High School" → output MUST start with "The Irregular at Magic High School"
+Example: Series: "Attack on Titan" → output MUST start with "Attack on Titan"
 
 RULE #2 - LANGUAGES (IMPORTANT - check carefully!):
 On RuTracker, "+Sub" ALWAYS means Russian subtitles!
@@ -140,10 +142,11 @@ class LLMService:
                     # Parse numbered responses
                     results = self._parse_batch_response(response_text, items)
                     
-                    # Cache results
+                    # Cache results (include series_name in cache key)
                     for item, result in zip(items, results):
                         if result != item.title:
-                            self._cache[item.title] = result
+                            cache_key = f"{item.title}|{item.series_name}"
+                            self._cache[cache_key] = result
                             logger.debug("Title normalized", original=item.title[:50], normalized=result)
                     
                     logger.info(
@@ -216,8 +219,9 @@ class LLMService:
         uncached_items = []
         
         for i, item in enumerate(items):
-            if item.title in self._cache:
-                results[i] = self._cache[item.title]
+            cache_key = f"{item.title}|{item.series_name}"
+            if cache_key in self._cache:
+                results[i] = self._cache[cache_key]
                 logger.debug("Cache hit", raw_title=item.title[:50])
             else:
                 uncached_indices.append(i)
