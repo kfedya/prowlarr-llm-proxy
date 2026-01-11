@@ -6,12 +6,13 @@ from dataclasses import dataclass
 logger = structlog.get_logger()
 
 # Rate limiting settings
-MAX_CONCURRENT_REQUESTS = 3  # Max parallel requests to OpenAI (reduced to avoid rate limits)
-REQUEST_DELAY = 0.5  # Delay between requests in seconds
+BATCH_SIZE = 10  # Number of torrents per LLM request
+MAX_CONCURRENT_BATCHES = 2  # Max parallel batch requests to OpenAI
 MAX_RETRIES = 2  # Max retries on rate limit error
-RETRY_BASE_DELAY = 1.0  # Base delay for exponential backoff (1s, 2s)
+RETRY_BASE_DELAY = 1.5  # Base delay for exponential backoff
 
-SYSTEM_PROMPT = """Parse torrent title for Sonarr. Output ONLY the normalized title.
+SYSTEM_PROMPT = """Parse torrent titles for Sonarr. You will receive multiple titles numbered [1], [2], etc.
+Output ONLY normalized titles, one per line, in the same order: 1: result, 2: result, etc.
 
 RULE #1 - NAME (MOST IMPORTANT):
 The "Series:" field contains the base name Sonarr expects. Use it BUT:
@@ -62,39 +63,18 @@ RULE #5 - QUALITY (ALWAYS include resolution!):
 FORMAT: {Series Title} - S{season}E{episode}-E{episode} - [Quality][Language]
 For Remux: {Series Title} - S{season} - Bluray.1080p.Remux [Language]
 
-EXAMPLES:
-
-Title: "Тодзима / Toujima Tanzaburou wa Kamen Rider ni Naritai [1-13 из 24] [RUS(ext), JAP+Sub] [WEB-DL 1080p]"
-Series: Tojima Wants to Be a Kamen Rider
-→ Tojima Wants to Be a Kamen Rider - S01E01-E13 - [WEBDL-1080p][JA][RU]
-
-Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
+EXAMPLE INPUT:
+[1] Title: "Атака титанов (ТВ-1) / Shingeki no Kyojin [25 из 25] [JAP+Sub] [BDRip 1080p]"
 Series: Attack on Titan
-→ Attack on Titan - S01E01-E25 - [Bluray-1080p][JA][RU]
-
-Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
-Series: One Piece
-→ One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]
-
-Title: "Наруто / Naruto [TV] [720p] [JAP+RUS]"
-Series: Naruto
-→ Naruto - S01 - [HDTV-720p][JA][RU]
-
-Title: "Атака титанов / Shingeki no Kyojin [25 из 25] [BDRemux] [JAP+RUS]"
-Series: Attack on Titan
-→ Attack on Titan - S01E01-E25 - Bluray.1080p.Remux [JA][RU]
-
-Title: "Золотое божество 2 / Golden Kamuy 2nd Season [12 из 12] [WEB-DL 1080p] [JAP+Sub]"
-Series: Golden Kamuy 2nd Season
-→ Golden Kamuy - S02E01-E12 - [WEBDL-1080p][JA][RU]
-
-Title: "Непутёвый ученик в школе магии (S3) / Mahouka Koukou no Rettousei 3rd Season [TV] [E13 of 13] [RUS(int), JAP+Sub] [2024, WEBRip 1080p]"
+[2] Title: "Непутёвый ученик в школе магии (S3) / Mahouka Koukou no Rettousei 3rd Season [E13 of 13] [JAP+Sub] [WEBRip 1080p]"
 Series: The Irregular at Magic High School
-→ The Irregular at Magic High School - S03E01-E13 - [WEBDL-1080p][JA][RU]
+[3] Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
+Series: One Piece
 
-Title: "Моя геройская академия (ТВ-7) / Boku no Hero Academia 7th Season [E21 of 21] [JAP+Sub] [WEB-DL 1080p]"
-Series: My Hero Academia
-→ My Hero Academia - S07E01-E21 - [WEBDL-1080p][JA][RU]"""
+EXAMPLE OUTPUT:
+1: Attack on Titan - S01E01-E25 - [Bluray-1080p][JA][RU]
+2: The Irregular at Magic High School - S03E01-E13 - [WEBDL-1080p][JA][RU]
+3: One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]"""
 
 
 @dataclass
@@ -115,106 +95,161 @@ class TorrentItem:
 
 
 class LLMService:
-    """Service for parsing torrent titles using OpenAI."""
+    """Service for parsing torrent titles using OpenAI with batching."""
 
     def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
         self._cache: dict[str, str] = {}
-        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        logger.info("LLMService initialized", model=model, max_concurrent=MAX_CONCURRENT_REQUESTS)
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_BATCHES)
+        logger.info("LLMService initialized", model=model, batch_size=BATCH_SIZE, max_concurrent_batches=MAX_CONCURRENT_BATCHES)
 
-    async def parse_item(self, item: TorrentItem) -> str:
+    async def _parse_batch(self, items: list[TorrentItem]) -> list[str]:
         """
-        Parse a torrent item into Sonarr-compatible format.
-        Returns the normalized title.
-        Uses semaphore for rate limiting and retries on 429 errors.
+        Parse a batch of torrent items in a single LLM request.
+        Returns list of normalized titles in the same order.
         """
-        # Check cache first (key is just the title)
-        if item.title in self._cache:
-            logger.debug("Cache hit for title", raw_title=item.title[:50])
-            return self._cache[item.title]
-
-        # Use semaphore to limit concurrent requests
+        if not items:
+            return []
+        
+        # Build batch prompt
+        prompt_parts = []
+        for i, item in enumerate(items, 1):
+            part = f"[{i}] Title: \"{item.title}\""
+            if item.series_name:
+                part += f"\nSeries: {item.series_name}"
+            prompt_parts.append(part)
+        
+        user_prompt = "\n".join(prompt_parts)
+        
         async with self._semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
-                    # Build prompt with all available info
-                    user_prompt = item.to_prompt()
-                    
                     response = await self._client.chat.completions.create(
                         model=self._model,
                         messages=[
                             {"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": user_prompt},
                         ],
-                        max_tokens=150,
-                        temperature=0.1,  # Low temperature for consistent output
+                        max_tokens=100 * len(items),  # ~100 tokens per result
+                        temperature=0.1,
                     )
-
-                    normalized = response.choices[0].message.content.strip()
                     
-                    # Basic validation - should not be empty
-                    if not normalized:
-                        logger.warning("LLM returned empty title", raw_title=item.title[:50])
-                        return item.title
-
-                    # Add [RUS] suffix if original title ends with RUS (from Prowlarr)
-                    if item.title.rstrip().upper().endswith("RUS"):
-                        normalized = f"{normalized}[RUS]"
-
-                    # Cache the result
-                    self._cache[item.title] = normalized
+                    response_text = response.choices[0].message.content.strip()
+                    
+                    # Parse numbered responses
+                    results = self._parse_batch_response(response_text, items)
+                    
+                    # Cache results
+                    for item, result in zip(items, results):
+                        if result != item.title:
+                            self._cache[item.title] = result
+                            logger.debug("Title normalized", original=item.title[:50], normalized=result)
                     
                     logger.info(
-                        "Title parsed",
-                        raw=item.title[:80],
-                        normalized=normalized,
+                        "Batch parsed",
+                        batch_size=len(items),
+                        success_count=sum(1 for r, i in zip(results, items) if r != i.title),
                     )
                     
-                    return normalized
-
+                    return results
+                    
                 except Exception as e:
                     error_str = str(e)
-                    # Check if it's a rate limit error (429)
                     if "429" in error_str or "rate_limit" in error_str.lower():
-                        delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                        delay = RETRY_BASE_DELAY * (2 ** attempt)
                         logger.warning(
-                            "Rate limit hit, retrying",
+                            "Rate limit hit, retrying batch",
                             attempt=attempt + 1,
                             max_retries=MAX_RETRIES,
                             delay=delay,
-                            raw_title=item.title[:50],
+                            batch_size=len(items),
                         )
                         await asyncio.sleep(delay)
                         continue
                     
-                    logger.error("Failed to parse title with LLM", error=error_str, raw_title=item.title[:50])
-                    return item.title
+                    logger.error("Failed to parse batch", error=error_str, batch_size=len(items))
+                    return [item.title for item in items]
             
-            # All retries exhausted
-            logger.error("All retries exhausted for title", raw_title=item.title[:50])
-            return item.title
+            logger.error("All retries exhausted for batch", batch_size=len(items))
+            return [item.title for item in items]
+    
+    def _parse_batch_response(self, response_text: str, items: list[TorrentItem]) -> list[str]:
+        """Parse LLM batch response into list of normalized titles."""
+        results = [item.title for item in items]  # Default to original titles
+        
+        for line in response_text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Parse "1: Title" or "1. Title" format
+            if ":" in line[:5] or "." in line[:5]:
+                sep_pos = min(
+                    line.find(":") if ":" in line[:5] else 999,
+                    line.find(".") if "." in line[:5] else 999
+                )
+                try:
+                    num = int(line[:sep_pos].strip())
+                    title = line[sep_pos + 1:].strip()
+                    if 1 <= num <= len(items) and title:
+                        # Add [RUS] suffix if original ends with RUS
+                        if items[num - 1].title.rstrip().upper().endswith("RUS"):
+                            title = f"{title}[RUS]"
+                        results[num - 1] = title
+                except (ValueError, IndexError):
+                    continue
+        
+        return results
 
     async def parse_items_batch(self, items: list[TorrentItem]) -> list[str]:
         """
-        Parse multiple torrent items with rate limiting.
-        Uses semaphore to limit concurrency and adds delay between task starts.
+        Parse multiple torrent items using batching for efficiency.
+        Groups items into batches of BATCH_SIZE and processes them in parallel.
         """
-        async def parse_with_delay(item: TorrentItem, index: int) -> str:
-            # Stagger the start of requests to avoid burst
-            await asyncio.sleep(index * REQUEST_DELAY)
-            return await self.parse_item(item)
+        if not items:
+            return []
+        
+        # Separate cached and uncached items
+        results = [None] * len(items)
+        uncached_indices = []
+        uncached_items = []
+        
+        for i, item in enumerate(items):
+            if item.title in self._cache:
+                results[i] = self._cache[item.title]
+                logger.debug("Cache hit", raw_title=item.title[:50])
+            else:
+                uncached_indices.append(i)
+                uncached_items.append(item)
+        
+        if not uncached_items:
+            logger.info("All items from cache", total=len(items))
+            return results
         
         logger.info(
             "Starting batch parse",
             total_items=len(items),
-            max_concurrent=MAX_CONCURRENT_REQUESTS,
-            request_delay=REQUEST_DELAY,
+            cached=len(items) - len(uncached_items),
+            to_process=len(uncached_items),
+            batch_size=BATCH_SIZE,
         )
         
-        tasks = [parse_with_delay(item, i) for i, item in enumerate(items)]
-        return await asyncio.gather(*tasks)
+        # Split into batches
+        batches = [
+            uncached_items[i:i + BATCH_SIZE]
+            for i in range(0, len(uncached_items), BATCH_SIZE)
+        ]
+        
+        # Process batches in parallel (limited by semaphore)
+        batch_results = await asyncio.gather(*[self._parse_batch(batch) for batch in batches])
+        
+        # Flatten and map back to original indices
+        flat_results = [title for batch in batch_results for title in batch]
+        for idx, title in zip(uncached_indices, flat_results):
+            results[idx] = title
+        
+        return results
 
     def clear_cache(self) -> None:
         """Clear the title cache."""
