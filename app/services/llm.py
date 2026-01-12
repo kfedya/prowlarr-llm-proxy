@@ -47,6 +47,21 @@ SEASON PACK detection: "[N of N]" or "[N из N]" where BOTH numbers are the SAM
 - "[1-13 из 24]" → E01-E13 (partial season, explicit range)
 - "[E1 of 13]" → E01 (single episode - first number is 1, second is total)
 - "[1123-1155]" (absolute numbers for long anime, no "of/из") → 1123-1155 (no S/E prefix)
+
+LONG ANIME (One Piece, Naruto, etc.) - ABSOLUTE EPISODE NUMBERS:
+- "[1086-1122 из XXX]" → 1086-1122 (XXX means ongoing series, extract the range!)
+- "[1086-1122 of XXX]" → 1086-1122
+- "[TV] [1086-1122 из XXX]" → 1086-1122 (ignore [TV], extract episode range)
+- For 3+ digit episode numbers, output WITHOUT S/E prefix: just "1086-1122"
+
+Split-cour seasons (Re:Zero S2, Kaguya-sama S3, etc.):
+• If two separate releases exist for the same season:
+  - [13 из 13] (часть 1) → SxxE01-E13
+  - [12 из 12] (часть 2) → SxxE14-E25
+  (do NOT merge into E01-E25 unless it's a single full-season release)
+• If single full release [25 из 25] → E01-E25
+• Never add "Part 1"/"Cour 1" in title — Sonarr doesn't like it
+
 WARNING: "[E13 of 13]" does NOT mean "only episode 13"! It means "complete season of 13 episodes" → E01-E13
 
 RULE #5 - QUALITY (ALWAYS include resolution!):
@@ -72,11 +87,14 @@ Series: Attack on Titan
 Series: The Irregular at Magic High School
 [3] Title: "Ван-Пис / One Piece [1123-1155] WEB-DL 1080p JAP+SUB"
 Series: One Piece
+[4] Title: "Ван Пис / One Piece [TV] [1086-1122 из XXX] [JAP+Sub] [WEB-DL] [720p]"
+Series: One Piece
 
 EXAMPLE OUTPUT:
 1: Attack on Titan - S01E01-E25 - [Bluray-1080p][JA][RU]
 2: The Irregular at Magic High School - S03E01-E13 - [WEBDL-1080p][JA][RU]
-3: One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]"""
+3: One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]
+4: One Piece - 1086-1122 - [WEBDL-720p][JA][RU]"""
 
 
 @dataclass
@@ -156,7 +174,7 @@ class LLMService:
                     )
                     
                     return results
-                    
+
                 except Exception as e:
                     error_str = str(e)
                     if "429" in error_str or "rate_limit" in error_str.lower():
