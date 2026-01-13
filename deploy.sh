@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONTAINER_NAME="prowlarr-llm-proxy"
 IMAGE_NAME="prowlarr-llm-proxy"
 ENV_FILE="$SCRIPT_DIR/.env"
+BRANCH="${1:-feature/sonarr-file-mapper}"  # Default to feature branch, or pass as argument
 
 # Check .env file exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -16,9 +17,12 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 echo "==> Using env file: $ENV_FILE"
+echo "==> Using branch: $BRANCH"
 
-echo "==> Pulling latest changes..."
-git pull
+echo "==> Fetching and checking out branch..."
+git fetch origin
+git checkout "$BRANCH"
+git pull origin "$BRANCH"
 
 echo "==> Building Docker image..."
 docker build -t "$IMAGE_NAME" .
