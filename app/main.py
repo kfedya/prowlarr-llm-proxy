@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.container import Container, shutdown_services
-from app.controllers import proxy_router, health_router
+from app.controllers import proxy_router, health_router, filemapper_router
 
 
 def configure_logging() -> None:
@@ -57,6 +57,9 @@ def create_app() -> FastAPI:
     # Include routers
     # Health routes first (without proxy catch-all)
     app.include_router(health_router)
+    
+    # File mapper API
+    app.include_router(filemapper_router)
     
     # Proxy catch-all last
     app.include_router(proxy_router)
