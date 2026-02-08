@@ -1,7 +1,9 @@
 """Webhook endpoints for Sonarr/Radarr events."""
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.exceptions import RequestValidationError
 from dependency_injector.wiring import inject, Provide
 import structlog
+import json
 
 from app.container import Container
 from app.models.sonarr import SonarrGrabWebhook
@@ -13,10 +15,30 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/webhook", tags=["Webhooks"])
 
 
+@router.post("/sonarr/grab/debug")
+async def debug_sonarr_webhook(request: Request) -> dict:
+    """Debug endpoint to see raw webhook payload."""
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8")
+        logger.info("Received raw webhook", body=body_str)
+        
+        try:
+            json_data = json.loads(body_str)
+            logger.info("Parsed JSON", json_keys=list(json_data.keys()) if isinstance(json_data, dict) else "not_dict")
+            return {"status": "ok", "received": json_data}
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse JSON", error=str(e))
+            return {"status": "error", "message": "Invalid JSON", "body": body_str}
+    except Exception as e:
+        logger.error("Debug endpoint error", error=str(e))
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/sonarr/grab")
 @inject
 async def handle_sonarr_grab(
-    payload: SonarrGrabWebhook,
+    request: Request,
     background_tasks: BackgroundTasks,
     sonarr_handler: SonarrHandlerService = Depends(Provide[Container.sonarr_handler_service]),
 ) -> dict:
@@ -26,13 +48,30 @@ async def handle_sonarr_grab(
     Processing is done asynchronously in the background.
     
     Args:
-        payload: Webhook payload from Sonarr
+        request: Raw HTTP request
         background_tasks: FastAPI background tasks
         sonarr_handler: Sonarr handler service (injected)
         
     Returns:
         Success message
     """
+    # Get and log raw body for debugging
+    body = await request.body()
+    body_str = body.decode("utf-8")
+    
+    try:
+        json_data = json.loads(body_str)
+        logger.debug("Received webhook payload", keys=list(json_data.keys()) if isinstance(json_data, dict) else None)
+    except:
+        pass
+    
+    # Parse payload
+    try:
+        payload = SonarrGrabWebhook.model_validate_json(body_str)
+    except Exception as e:
+        logger.error("Failed to parse webhook payload", error=str(e), body_preview=body_str[:500])
+        raise HTTPException(status_code=422, detail=f"Invalid payload: {str(e)}")
+    
     # Handle test webhook from Sonarr
     if payload.eventType == "Test":
         logger.info("Received Sonarr test webhook")
