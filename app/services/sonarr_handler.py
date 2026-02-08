@@ -344,14 +344,9 @@ class SonarrHandlerService:
         async with self._qb_service:
             for old_path, new_name in name_mappings.items():
                 try:
-                    # Preserve directory structure
-                    old_parts = old_path.split("/")
-                    if len(old_parts) > 1:
-                        # File is in subfolder, keep the subfolder
-                        folder = "/".join(old_parts[:-1])
-                        new_path = f"{folder}/{new_name}"
-                    else:
-                        new_path = new_name
+                    # Move all files to root level (no subfolders)
+                    # This ensures Sonarr can properly import them
+                    new_path = new_name
                     
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
