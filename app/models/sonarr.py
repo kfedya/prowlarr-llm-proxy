@@ -45,17 +45,20 @@ class WebhookCustomFormatInfo(BaseModel):
 
 
 class SonarrGrabWebhook(BaseModel):
-    """Sonarr Grab event webhook payload."""
+    """Sonarr Grab event webhook payload.
     
-    eventType: str = Field(..., description="Event type (should be 'Grab')")
+    Note: Some fields are optional to support Sonarr's test webhook.
+    """
+    
+    eventType: str = Field(..., description="Event type (should be 'Grab' or 'Test')")
     instanceName: str = Field(default="", description="Sonarr instance name")
     applicationUrl: str = Field(default="", description="Sonarr application URL")
-    series: WebhookSeries = Field(..., description="Series information")
-    episodes: list[WebhookEpisode] = Field(..., description="Episodes being grabbed")
-    release: WebhookRelease = Field(..., description="Release information")
+    series: WebhookSeries | None = Field(default=None, description="Series information")
+    episodes: list[WebhookEpisode] = Field(default_factory=list, description="Episodes being grabbed")
+    release: WebhookRelease | None = Field(default=None, description="Release information")
     downloadClient: str = Field(default="", description="Download client name")
     downloadClientType: str = Field(default="", description="Download client type")
-    downloadId: str = Field(..., description="Download ID / torrent hash")
+    downloadId: str = Field(default="", description="Download ID / torrent hash")
     customFormatInfo: WebhookCustomFormatInfo | None = Field(
         default=None,
         description="Custom format info",

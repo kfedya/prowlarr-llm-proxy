@@ -33,10 +33,25 @@ async def handle_sonarr_grab(
     Returns:
         Success message
     """
+    # Handle test webhook from Sonarr
+    if payload.eventType == "Test":
+        logger.info("Received Sonarr test webhook")
+        return {
+            "status": "ok",
+            "message": "Webhook endpoint is working correctly",
+        }
+    
     if payload.eventType != "Grab":
         raise HTTPException(
             status_code=400,
             detail=f"Invalid event type: {payload.eventType}. Expected 'Grab'",
+        )
+    
+    # Validate required fields for Grab event
+    if not payload.series or not payload.release:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required fields for Grab event",
         )
     
     logger.info(
