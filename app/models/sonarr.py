@@ -37,10 +37,17 @@ class WebhookRelease(BaseModel):
     size: int = Field(default=0, description="Size in bytes")
 
 
+class WebhookCustomFormat(BaseModel):
+    """Custom format object."""
+    
+    id: int = Field(..., description="Custom format ID")
+    name: str = Field(..., description="Custom format name")
+
+
 class WebhookCustomFormatInfo(BaseModel):
     """Custom format information."""
     
-    customFormats: list[str] = Field(default_factory=list, description="Custom format names")
+    customFormats: list[WebhookCustomFormat] = Field(default_factory=list, description="Custom formats")
     customFormatScore: int = Field(default=0, description="Custom format score")
 
 
