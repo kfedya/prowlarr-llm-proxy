@@ -278,3 +278,226 @@ class LLMService:
         self._cache.clear()
         logger.info("LLM cache cleared")
 
+    async def normalize_file_names(
+        self,
+        file_names: list[str],
+        series_name: str,
+        season_number: int,
+        episodes: list[int] | None = None,
+    ) -> dict[str, str]:
+        """Normalize torrent file names for Sonarr.
+        
+        Args:
+            file_names: List of file names to normalize (from qBittorrent)
+            series_name: Series name from Sonarr
+            season_number: Season number
+            episodes: Optional list of episode numbers expected (for validation)
+            
+        Returns:
+            Dict mapping old file name to new file name.
+            If a file should not be renamed, it won't be in the dict.
+        """
+        if not file_names:
+            return {}
+        
+        logger.info(
+            "Normalizing file names with LLM",
+            series_name=series_name,
+            season=season_number,
+            file_count=len(file_names),
+        )
+        
+        # Build prompt for file normalization
+        system_prompt = """You are a file renamer for Sonarr. Given a series name, season number, and list of file names, 
+output normalized file names in Sonarr format.
+
+FORMAT: {Series Name} - S{Season}E{Episode}.{ext}
+Example: "Attack on Titan - S01E12.mkv"
+
+RULES:
+1. Extract episode numbers from file names (look for patterns like E12, ep12, 12, etc.)
+2. Preserve file extensions (.mkv, .mp4, etc.)
+3. Use the EXACT series name provided (do not translate or modify)
+4. If a file is not a video episode (e.g., subtitle, NFO, sample), output "SKIP"
+5. For multi-episode files (E01-E02), use format: S01E01-E02
+6. Output format: "old_filename.mkv -> new_filename.mkv" (one per line)
+
+IMPORTANT: Extract episode numbers carefully! Common patterns:
+- [Group] Series - 12 [1080p].mkv → E12
+- Series S01E12.mkv → E12  
+- Series 1x12.mkv → E12
+- Series.2022.12.mkv → E12 (if it's episodic)
+- [12].mkv → E12
+"""
+        
+        # Build user prompt
+        user_prompt_parts = [
+            f"Series: {series_name}",
+            f"Season: {season_number}",
+        ]
+        
+        if episodes:
+            user_prompt_parts.append(f"Expected episodes: {', '.join(f'E{e:02d}' for e in sorted(episodes)[:10])}")
+        
+        user_prompt_parts.append("\nFiles to rename:")
+        for i, fname in enumerate(file_names, 1):
+            user_prompt_parts.append(f"{i}. {fname}")
+        
+        user_prompt = "\n".join(user_prompt_parts)
+        
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=150 * len(file_names),
+                temperature=0.1,
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            
+            logger.debug("LLM file normalization response", response=response_text[:500])
+            
+            # Parse response
+            mappings = {}
+            for line in response_text.split("\n"):
+                line = line.strip()
+                if not line or "SKIP" in line.upper():
+                    continue
+                
+                # Parse "old -> new" format
+                if "->" in line:
+                    parts = line.split("->", 1)
+                    if len(parts) == 2:
+                        old_name = parts[0].strip()
+                        new_name = parts[1].strip()
+                        
+                        # Remove leading numbers like "1. " from old_name
+                        old_name = old_name.lstrip("0123456789. ")
+                        
+                        # Find matching file name
+                        for fname in file_names:
+                            if fname == old_name or fname.endswith(old_name):
+                                mappings[fname] = new_name
+                                break
+            
+            logger.info(
+                "File names normalized",
+                input_count=len(file_names),
+                output_count=len(mappings),
+                skipped=len(file_names) - len(mappings),
+            )
+            
+            return mappings
+            
+        except Exception as e:
+            logger.error("Failed to normalize file names", error=str(e))
+            return {}
+
+    async def normalize_subtitle_names(
+        self,
+        subtitle_files: list[str],
+        video_mappings: dict[str, str],
+    ) -> dict[str, str]:
+        """Normalize subtitle file names to match renamed video files.
+        
+        Args:
+            subtitle_files: List of subtitle file paths
+            video_mappings: Dict of old video path -> new video name
+            
+        Returns:
+            Dict mapping old subtitle path to new subtitle name
+        """
+        if not subtitle_files or not video_mappings:
+            return {}
+        
+        logger.info(
+            "Normalizing subtitle names with LLM",
+            subtitle_count=len(subtitle_files),
+            video_count=len(video_mappings),
+        )
+        
+        system_prompt = """You are a subtitle file renamer for Sonarr. Given video file mappings and subtitle files, 
+match subtitles to videos and output normalized subtitle names.
+
+RULES:
+1. Match each subtitle to its corresponding video file
+2. Extract language code and provider from subtitle name (ru, eng, SovetRomantica, etc.)
+3. Format: {Video Base Name}.{lang}.{provider}.{ext}
+   - If only language: {Video Base Name}.{lang}.{ext}
+   - If no language info: {Video Base Name}.{ext}
+4. Move subtitles to root level (remove folder paths)
+5. If subtitle doesn't match any video, output "SKIP"
+
+EXAMPLES:
+Video: "Attack on Titan - S01E01.mkv"
+Subtitle: "folder/[SubsPlease] Shingeki - 01.ru.ass" → "Attack on Titan - S01E01.ru.ass"
+Subtitle: "folder/[SubsPlease] Shingeki - 01.ru.SovetRomantica.ass" → "Attack on Titan - S01E01.ru.SovetRomantica.ass"
+Subtitle: "folder/[SubsPlease] Shingeki - 01.eng.srt" → "Attack on Titan - S01E01.eng.srt"
+
+OUTPUT FORMAT: "old_path -> new_name" (one per line)"""
+        
+        # Build user prompt
+        user_prompt_parts = ["Video file mappings:"]
+        for old_path, new_name in video_mappings.items():
+            user_prompt_parts.append(f"  {old_path} → {new_name}")
+        
+        user_prompt_parts.append("\nSubtitle files to rename:")
+        for i, sub_file in enumerate(subtitle_files, 1):
+            user_prompt_parts.append(f"{i}. {sub_file}")
+        
+        user_prompt = "\n".join(user_prompt_parts)
+        
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=100 * len(subtitle_files),
+                temperature=0.1,
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            
+            logger.debug("LLM subtitle normalization response", response=response_text[:500])
+            
+            # Parse response
+            mappings = {}
+            for line in response_text.split("\n"):
+                line = line.strip()
+                if not line or "SKIP" in line.upper():
+                    continue
+                
+                # Parse "old -> new" format or "1. old -> new" format
+                if "->" in line:
+                    # Remove leading number if present
+                    line = line.lstrip("0123456789. ")
+                    
+                    parts = line.split("->", 1)
+                    if len(parts) == 2:
+                        old_path = parts[0].strip()
+                        new_name = parts[1].strip()
+                        
+                        # Find matching subtitle file
+                        for sub_file in subtitle_files:
+                            if sub_file.endswith(old_path) or old_path in sub_file:
+                                mappings[sub_file] = new_name
+                                break
+            
+            logger.info(
+                "Subtitle names normalized",
+                input_count=len(subtitle_files),
+                output_count=len(mappings),
+                skipped=len(subtitle_files) - len(mappings),
+            )
+            
+            return mappings
+            
+        except Exception as e:
+            logger.error("Failed to normalize subtitle names", error=str(e))
+            return {}
+

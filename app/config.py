@@ -30,6 +30,19 @@ class Settings(BaseSettings):
     llm_enabled: bool = Field(default=True, description="Enable LLM title parsing")
     max_llm_titles: int = Field(default=50, description="Max titles to process through LLM (0 = unlimited)")
 
+    # qBittorrent settings
+    qbittorrent_url: str = Field(default="http://localhost:8080", description="qBittorrent Web UI URL")
+    qbittorrent_username: str = Field(default="admin", description="qBittorrent username")
+    qbittorrent_password: str = Field(default="", description="qBittorrent password")
+    qbittorrent_timeout: float = Field(default=30.0, description="qBittorrent request timeout in seconds")
+
+    # Redis settings
+    redis_host: str = Field(default="localhost", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    redis_db: int = Field(default=0, description="Redis database number")
+    redis_password: str = Field(default="", description="Redis password (if required)")
+    redis_ttl_hours: int = Field(default=48, description="TTL for cached mappings in hours")
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

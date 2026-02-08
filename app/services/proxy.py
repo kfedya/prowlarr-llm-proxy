@@ -7,6 +7,7 @@ from fastapi import Request, Response
 
 if TYPE_CHECKING:
     from app.services.llm import LLMService
+    from app.services.torrent_mapping import TorrentMappingService
 
 from app.services.llm import TorrentItem
 
@@ -19,6 +20,10 @@ TORZNAB_SEARCH_PARAMS = {"t": ["search", "tvsearch", "movie", "music", "book"]}
 ITEM_PATTERN = re.compile(r"<item>(.*?)</item>", re.DOTALL)
 TITLE_TAG_PATTERN = re.compile(r"<title>(.*?)</title>", re.DOTALL)
 CATEGORY_PATTERN = re.compile(r'<category>(\d+)</category>', re.DOTALL)
+GUID_PATTERN = re.compile(r'<guid>(.*?)</guid>', re.DOTALL)
+SIZE_PATTERN = re.compile(r'<size>(\d+)</size>', re.DOTALL)
+INDEXER_PATTERN = re.compile(r'<prowlarr:indexer>(.*?)</prowlarr:indexer>', re.DOTALL)
+LINK_PATTERN = re.compile(r'<link>(.*?)</link>', re.DOTALL)
 
 
 class ProxyService:
@@ -30,17 +35,20 @@ class ProxyService:
         timeout: float,
         llm_service: "LLMService | None" = None,
         llm_enabled: bool = True,
+        torrent_mapping_service: "TorrentMappingService | None" = None,
     ):
         self._routes = {int(k): v.rstrip("/") for k, v in routes.items()}
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
         self._llm_service = llm_service
         self._llm_enabled = llm_enabled and llm_service is not None
+        self._mapping_service = torrent_mapping_service
 
         logger.info(
             "ProxyService initialized",
             routes=self._routes,
             llm_enabled=self._llm_enabled,
+            mapping_enabled=torrent_mapping_service is not None,
         )
 
     def _get_upstream_url(self, request: Request) -> str | None:
@@ -83,6 +91,20 @@ class ProxyService:
             category=category_match.group(1) if category_match else "",
             series_name=series_name,
         )
+    
+    def _extract_item_metadata(self, item_xml: str) -> dict[str, str]:
+        """Extract additional metadata from XML item for mapping storage."""
+        guid_match = GUID_PATTERN.search(item_xml)
+        size_match = SIZE_PATTERN.search(item_xml)
+        indexer_match = INDEXER_PATTERN.search(item_xml)
+        link_match = LINK_PATTERN.search(item_xml)
+        
+        return {
+            "guid": guid_match.group(1) if guid_match else "",
+            "size": size_match.group(1) if size_match else "0",
+            "indexer": indexer_match.group(1) if indexer_match else "",
+            "download_url": link_match.group(1) if link_match else "",
+        }
 
     async def _process_torznab_response(self, xml_content: str, series_name: str = "") -> str:
         """Process Torznab XML response and normalize titles using LLM.
@@ -147,6 +169,27 @@ class ProxyService:
                     
                     # Update offset for next iteration
                     offset += len(safe_title) - len(item_data.title)
+                    
+                    # Store mapping in Redis
+                    if self._mapping_service:
+                        metadata = self._extract_item_metadata(item_content)
+                        try:
+                            await self._mapping_service.store(
+                                normalized_title=normalized_title,
+                                original_title=item_data.title,
+                                series_name=series_name,
+                                guid=metadata["guid"],
+                                indexer=metadata["indexer"],
+                                category=item_data.category,
+                                size=int(metadata["size"]),
+                                download_url=metadata["download_url"],
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to store torrent mapping",
+                                error=str(e),
+                                normalized_title=normalized_title[:50],
+                            )
                     
                     logger.debug(
                         "Title normalized",
