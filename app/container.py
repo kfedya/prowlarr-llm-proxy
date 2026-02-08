@@ -46,6 +46,7 @@ class Container(containers.DeclarativeContainer):
         LLMService,
         api_key=config.provided.openai_api_key,
         model=config.provided.openai_model,
+        torrent_mapping_service=torrent_mapping_service,
     )
 
     # Proxy Service

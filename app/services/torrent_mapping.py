@@ -281,4 +281,75 @@ class TorrentMappingService:
         except Exception as e:
             logger.error("Failed to get stats", error=str(e))
             return {"error": str(e)}
+    
+    def _make_normalized_cache_key(self, original_title: str, series_name: str) -> str:
+        """Create Redis key for normalized title cache."""
+        cache_key = f"{original_title}|{series_name}"
+        return f"torrent:normalized:{cache_key}"
+    
+    async def store_normalized_cache(
+        self,
+        original_title: str,
+        series_name: str,
+        normalized_title: str,
+    ) -> None:
+        """Store normalized title in cache.
+        
+        Args:
+            original_title: Original torrent title
+            series_name: Series name from search
+            normalized_title: Normalized title from LLM
+        """
+        key = self._make_normalized_cache_key(original_title, series_name)
+        ttl_seconds = int(self._ttl.total_seconds())
+        
+        try:
+            await self._redis.setex(key, ttl_seconds, normalized_title)
+            logger.debug(
+                "Cached normalized title",
+                original=original_title[:50],
+                normalized=normalized_title[:50],
+                series=series_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to cache normalized title",
+                error=str(e),
+                original=original_title[:50],
+            )
+    
+    async def get_normalized_cache(
+        self,
+        original_title: str,
+        series_name: str,
+    ) -> str | None:
+        """Get normalized title from cache.
+        
+        Args:
+            original_title: Original torrent title
+            series_name: Series name from search
+            
+        Returns:
+            Normalized title if cached, None otherwise
+        """
+        key = self._make_normalized_cache_key(original_title, series_name)
+        
+        try:
+            result = await self._redis.get(key)
+            if result:
+                normalized = result.decode("utf-8") if isinstance(result, bytes) else result
+                logger.debug(
+                    "Normalized cache hit",
+                    original=original_title[:50],
+                    normalized=normalized[:50],
+                )
+                return normalized
+            return None
+        except Exception as e:
+            logger.warning(
+                "Failed to get normalized cache",
+                error=str(e),
+                original=original_title[:50],
+            )
+            return None
 

@@ -117,12 +117,24 @@ class TorrentItem:
 class LLMService:
     """Service for parsing torrent titles using OpenAI with batching."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        torrent_mapping_service=None,
+    ):
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
-        self._cache: dict[str, str] = {}
+        self._cache: dict[str, str] = {}  # In-memory cache for fast lookups
+        self._mapping_service = torrent_mapping_service  # Redis cache
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_BATCHES)
-        logger.info("LLMService initialized", model=model, batch_size=BATCH_SIZE, max_concurrent_batches=MAX_CONCURRENT_BATCHES)
+        logger.info(
+            "LLMService initialized",
+            model=model,
+            batch_size=BATCH_SIZE,
+            max_concurrent_batches=MAX_CONCURRENT_BATCHES,
+            redis_cache_enabled=torrent_mapping_service is not None,
+        )
 
     async def _parse_batch(self, items: list[TorrentItem]) -> list[str]:
         """
@@ -160,11 +172,22 @@ class LLMService:
                     # Parse numbered responses
                     results = self._parse_batch_response(response_text, items)
                     
-                    # Cache results (include series_name in cache key)
+                    # Cache results in both memory and Redis
                     for item, result in zip(items, results):
                         if result != item.title:
                             cache_key = f"{item.title}|{item.series_name}"
+                            
+                            # Store in memory cache
                             self._cache[cache_key] = result
+                            
+                            # Store in Redis cache (survives restarts)
+                            if self._mapping_service:
+                                await self._mapping_service.store_normalized_cache(
+                                    item.title,
+                                    item.series_name,
+                                    result,
+                                )
+                            
                             logger.debug("Title normalized", original=item.title[:50], normalized=result)
                     
                     logger.info(
@@ -227,6 +250,7 @@ class LLMService:
         """
         Parse multiple torrent items using batching for efficiency.
         Groups items into batches of BATCH_SIZE and processes them in parallel.
+        Checks in-memory cache first, then Redis cache, then calls LLM.
         """
         if not items:
             return []
@@ -238,12 +262,29 @@ class LLMService:
         
         for i, item in enumerate(items):
             cache_key = f"{item.title}|{item.series_name}"
+            
+            # Check in-memory cache first (fastest)
             if cache_key in self._cache:
                 results[i] = self._cache[cache_key]
-                logger.debug("Cache hit", raw_title=item.title[:50])
-            else:
-                uncached_indices.append(i)
-                uncached_items.append(item)
+                logger.debug("Memory cache hit", raw_title=item.title[:50])
+                continue
+            
+            # Check Redis cache second (survives restarts)
+            if self._mapping_service:
+                redis_result = await self._mapping_service.get_normalized_cache(
+                    item.title,
+                    item.series_name,
+                )
+                if redis_result:
+                    results[i] = redis_result
+                    # Store in memory cache for faster subsequent lookups
+                    self._cache[cache_key] = redis_result
+                    logger.debug("Redis cache hit", raw_title=item.title[:50])
+                    continue
+            
+            # Not found in any cache - need to call LLM
+            uncached_indices.append(i)
+            uncached_items.append(item)
         
         if not uncached_items:
             logger.info("All items from cache", total=len(items))
