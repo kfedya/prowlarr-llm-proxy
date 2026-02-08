@@ -155,8 +155,20 @@ class SonarrHandlerService:
                 mapping_count=len(name_mappings),
             )
             
-            # Step 5: Rename files in qBittorrent
-            rename_count = await self._rename_files(torrent.hash, name_mappings)
+            # Step 5: Rename torrent FIRST to create proper folder structure
+            torrent_folder_name = await self._rename_torrent_for_sonarr(
+                torrent_hash=torrent.hash,
+                series_name=payload.series.title,
+                season_number=payload.episodes[0].seasonNumber if payload.episodes else 1,
+                episode_numbers=[ep.episodeNumber for ep in payload.episodes],
+            )
+            
+            # Step 6: Rename files inside the torrent folder
+            rename_count = await self._rename_files(
+                torrent_hash=torrent.hash,
+                name_mappings=name_mappings,
+                torrent_folder=torrent_folder_name,
+            )
             
             logger.info(
                 "Video file renaming completed",
@@ -165,8 +177,12 @@ class SonarrHandlerService:
                 total=len(name_mappings),
             )
             
-            # Step 6: Process subtitles
-            subtitle_count = await self._process_subtitles(torrent.hash, name_mappings)
+            # Step 7: Process subtitles inside the torrent folder
+            subtitle_count = await self._process_subtitles(
+                torrent_hash=torrent.hash,
+                name_mappings=name_mappings,
+                torrent_folder=torrent_folder_name,
+            )
             
             logger.info(
                 "Processing completed",
@@ -174,14 +190,7 @@ class SonarrHandlerService:
                 videos_renamed=rename_count,
                 subtitles_processed=subtitle_count,
                 series=payload.series.title,
-            )
-            
-            # Step 7: Rename torrent for Sonarr to parse correctly
-            await self._rename_torrent_for_sonarr(
-                torrent_hash=torrent.hash,
-                series_name=payload.series.title,
-                season_number=payload.episodes[0].seasonNumber if payload.episodes else 1,
-                episode_numbers=[ep.episodeNumber for ep in payload.episodes],
+                torrent_folder=torrent_folder_name[:60],
             )
         
         except Exception as e:
@@ -329,12 +338,14 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         name_mappings: dict[str, str],
+        torrent_folder: str,
     ) -> int:
         """Rename files in qBittorrent.
         
         Args:
             torrent_hash: Torrent hash
             name_mappings: Dict mapping old file name to new file name
+            torrent_folder: Name of the torrent folder to place files in
             
         Returns:
             Number of successfully renamed files
@@ -344,9 +355,9 @@ class SonarrHandlerService:
         async with self._qb_service:
             for old_path, new_name in name_mappings.items():
                 try:
-                    # Move all files to root level (no subfolders)
-                    # This ensures Sonarr can properly import them
-                    new_path = new_name
+                    # Place all files inside the torrent folder
+                    # Format: "Torrent Folder Name/filename.ext"
+                    new_path = f"{torrent_folder}/{new_name}"
                     
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
@@ -378,15 +389,17 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         video_mappings: dict[str, str],
+        torrent_folder: str,
     ) -> int:
         """Process and rename subtitle files using LLM.
         
         Uses LLM to match subtitles to videos and generate proper names.
-        Moves subtitles from subfolders to root level.
+        Places subtitles inside torrent folder alongside videos.
         
         Args:
             torrent_hash: Torrent hash
             video_mappings: Dict of old video paths to new video names
+            torrent_folder: Name of the torrent folder to place files in
             
         Returns:
             Number of subtitles processed
@@ -436,8 +449,8 @@ class SonarrHandlerService:
             processed_count = 0
             for old_path, new_name in subtitle_mappings.items():
                 try:
-                    # New path is always at root level (no folders)
-                    new_path = new_name
+                    # Place subtitle inside torrent folder alongside videos
+                    new_path = f"{torrent_folder}/{new_name}"
                     
                     # Skip if names are the same
                     if old_path == new_path:
@@ -475,7 +488,7 @@ class SonarrHandlerService:
         series_name: str,
         season_number: int,
         episode_numbers: list[int],
-    ) -> None:
+    ) -> str:
         """Rename torrent to a format Sonarr can parse.
         
         Args:
@@ -483,6 +496,9 @@ class SonarrHandlerService:
             series_name: Series name
             season_number: Season number
             episode_numbers: List of episode numbers
+            
+        Returns:
+            The new torrent folder name
         """
         try:
             # Build torrent name in Sonarr-parseable format
@@ -514,6 +530,8 @@ class SonarrHandlerService:
                 torrent_hash=torrent_hash,
                 new_name=new_torrent_name[:80],
             )
+            
+            return new_torrent_name
         
         except Exception as e:
             logger.error(
@@ -522,5 +540,6 @@ class SonarrHandlerService:
                 torrent_hash=torrent_hash,
                 series_name=series_name,
             )
-            # Don't raise - this is not critical, files are already renamed
+            # Return series name as fallback
+            return series_name
 
