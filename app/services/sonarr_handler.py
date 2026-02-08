@@ -163,11 +163,10 @@ class SonarrHandlerService:
                 episode_numbers=[ep.episodeNumber for ep in payload.episodes],
             )
             
-            # Step 6: Rename files inside the torrent folder
+            # Step 6: Rename files in the torrent
             rename_count = await self._rename_files(
                 torrent_hash=torrent.hash,
                 name_mappings=name_mappings,
-                torrent_folder=torrent_folder_name,
             )
             
             logger.info(
@@ -177,11 +176,10 @@ class SonarrHandlerService:
                 total=len(name_mappings),
             )
             
-            # Step 7: Process subtitles inside the torrent folder
+            # Step 7: Process subtitles
             subtitle_count = await self._process_subtitles(
                 torrent_hash=torrent.hash,
                 video_mappings=name_mappings,
-                torrent_folder=torrent_folder_name,
             )
             
             logger.info(
@@ -190,7 +188,7 @@ class SonarrHandlerService:
                 videos_renamed=rename_count,
                 subtitles_processed=subtitle_count,
                 series=payload.series.title,
-                torrent_folder=torrent_folder_name[:60],
+                torrent_name=torrent_folder_name[:60],
             )
         
         except Exception as e:
@@ -338,14 +336,12 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         name_mappings: dict[str, str],
-        torrent_folder: str,
     ) -> int:
         """Rename files in qBittorrent.
         
         Args:
             torrent_hash: Torrent hash
             name_mappings: Dict mapping old file name to new file name
-            torrent_folder: Name of the torrent folder to place files in
             
         Returns:
             Number of successfully renamed files
@@ -355,14 +351,10 @@ class SonarrHandlerService:
         async with self._qb_service:
             for old_path, new_name in name_mappings.items():
                 try:
-                    # Place all files inside the torrent folder
-                    # Format: "Torrent Folder Name/filename.ext"
-                    new_path = f"{torrent_folder}/{new_name}"
-                    
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
                         old_path=old_path,
-                        new_path=new_path,
+                        new_path=new_name,
                     )
                     
                     rename_count += 1
@@ -371,7 +363,7 @@ class SonarrHandlerService:
                         "File renamed",
                         torrent_hash=torrent_hash,
                         old=old_path[:60],
-                        new=new_path[:60],
+                        new=new_name[:60],
                     )
                 
                 except Exception as e:
@@ -389,17 +381,14 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         video_mappings: dict[str, str],
-        torrent_folder: str,
     ) -> int:
         """Process and rename subtitle files using LLM.
         
         Uses LLM to match subtitles to videos and generate proper names.
-        Places subtitles inside torrent folder alongside videos.
         
         Args:
             torrent_hash: Torrent hash
             video_mappings: Dict of old video paths to new video names
-            torrent_folder: Name of the torrent folder to place files in
             
         Returns:
             Number of subtitles processed
@@ -449,17 +438,14 @@ class SonarrHandlerService:
             processed_count = 0
             for old_path, new_name in subtitle_mappings.items():
                 try:
-                    # Place subtitle inside torrent folder alongside videos
-                    new_path = f"{torrent_folder}/{new_name}"
-                    
                     # Skip if names are the same
-                    if old_path == new_path:
+                    if old_path == new_name:
                         continue
                     
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
                         old_path=old_path,
-                        new_path=new_path,
+                        new_path=new_name,
                     )
                     
                     processed_count += 1
@@ -468,7 +454,7 @@ class SonarrHandlerService:
                         "Subtitle processed",
                         torrent_hash=torrent_hash,
                         old=old_path[:60],
-                        new=new_path[:60],
+                        new=new_name[:60],
                     )
                 
                 except Exception as e:
@@ -520,10 +506,11 @@ class SonarrHandlerService:
                 new_name=new_torrent_name[:80],
             )
             
-            await self._qb_service.rename_torrent(
-                torrent_hash=torrent_hash,
-                new_name=new_torrent_name,
-            )
+            async with self._qb_service:
+                await self._qb_service.rename_torrent(
+                    torrent_hash=torrent_hash,
+                    new_name=new_torrent_name,
+                )
             
             logger.info(
                 "Torrent renamed successfully",
