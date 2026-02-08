@@ -200,7 +200,10 @@ class SonarrHandlerService:
             )
     
     async def _find_torrent(self, download_id: str, original_title: str):
-        """Find torrent in qBittorrent by download ID or title.
+        """Find torrent in qBittorrent by download ID or title with retry logic.
+        
+        Torrent might not be immediately available after Sonarr sends the download request.
+        This method retries with exponential backoff.
         
         Args:
             download_id: Download ID from Sonarr (might be hash)
@@ -209,22 +212,71 @@ class SonarrHandlerService:
         Returns:
             TorrentInfo if found, None otherwise
         """
-        async with self._qb_service:
-            # Try by hash first
+        delay = self._retry_delay
+        
+        for attempt in range(self._max_retries):
             try:
-                torrent = await self._qb_service.get_torrent_by_hash(download_id)
-                if torrent:
-                    return torrent
+                async with self._qb_service:
+                    # Try by hash first
+                    try:
+                        torrent = await self._qb_service.get_torrent_by_hash(download_id)
+                        if torrent:
+                            if attempt > 0:
+                                logger.info(
+                                    "Found torrent after retries",
+                                    download_id=download_id,
+                                    attempt=attempt + 1,
+                                    torrent_name=torrent.name[:60],
+                                )
+                            return torrent
+                    except Exception as e:
+                        logger.debug("Failed to find torrent by hash", error=str(e))
+                    
+                    # Try by name
+                    torrents = await self._qb_service.get_torrent_list()
+                    for torrent in torrents:
+                        if original_title.lower() in torrent.name.lower():
+                            if attempt > 0:
+                                logger.info(
+                                    "Found torrent by name after retries",
+                                    original_title=original_title[:60],
+                                    attempt=attempt + 1,
+                                    torrent_name=torrent.name[:60],
+                                )
+                            return torrent
+                
+                # Torrent not found yet
+                if attempt < self._max_retries - 1:
+                    logger.debug(
+                        "Torrent not found, retrying...",
+                        download_id=download_id,
+                        original_title=original_title[:60],
+                        attempt=attempt + 1,
+                        max_retries=self._max_retries,
+                        retry_in=delay,
+                    )
+                
             except Exception as e:
-                logger.debug("Failed to find torrent by hash", error=str(e))
+                logger.warning(
+                    "Error searching for torrent, retrying...",
+                    download_id=download_id,
+                    attempt=attempt + 1,
+                    error=str(e),
+                    retry_in=delay,
+                )
             
-            # Try by name
-            torrents = await self._qb_service.get_torrent_list()
-            for torrent in torrents:
-                if original_title.lower() in torrent.name.lower():
-                    return torrent
-            
-            return None
+            # Wait before retry
+            if attempt < self._max_retries - 1:
+                await asyncio.sleep(delay)
+                delay *= self._retry_backoff
+        
+        logger.error(
+            "Torrent not found after all retries",
+            download_id=download_id,
+            original_title=original_title[:60],
+            max_retries=self._max_retries,
+        )
+        return None
     
     async def _get_video_files_with_retry(self, torrent_hash: str):
         """Get list of video files from torrent with retry logic.
