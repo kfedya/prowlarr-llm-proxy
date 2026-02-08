@@ -167,6 +167,7 @@ class SonarrHandlerService:
             rename_count = await self._rename_files(
                 torrent_hash=torrent.hash,
                 name_mappings=name_mappings,
+                torrent_folder=torrent_folder_name,
             )
             
             logger.info(
@@ -180,6 +181,7 @@ class SonarrHandlerService:
             subtitle_count = await self._process_subtitles(
                 torrent_hash=torrent.hash,
                 video_mappings=name_mappings,
+                torrent_folder=torrent_folder_name,
             )
             
             logger.info(
@@ -388,12 +390,14 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         name_mappings: dict[str, str],
+        torrent_folder: str,
     ) -> int:
         """Rename files in qBittorrent.
         
         Args:
             torrent_hash: Torrent hash
             name_mappings: Dict mapping old file name to new file name
+            torrent_folder: New torrent folder name (from rename_torrent)
             
         Returns:
             Number of successfully renamed files
@@ -403,10 +407,13 @@ class SonarrHandlerService:
         async with self._qb_service:
             for old_path, new_name in name_mappings.items():
                 try:
+                    # Construct new path with torrent folder
+                    new_path = f"{torrent_folder}/{new_name}"
+                    
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
                         old_path=old_path,
-                        new_path=new_name,
+                        new_path=new_path,
                     )
                     
                     rename_count += 1
@@ -415,7 +422,7 @@ class SonarrHandlerService:
                         "File renamed",
                         torrent_hash=torrent_hash,
                         old=old_path[:60],
-                        new=new_name[:60],
+                        new=new_path[:60],
                     )
                 
                 except Exception as e:
@@ -424,7 +431,7 @@ class SonarrHandlerService:
                         error=str(e),
                         torrent_hash=torrent_hash,
                         old_path=old_path[:60],
-                        new_name=new_name[:60],
+                        new_path=f"{torrent_folder}/{new_name}"[:60],
                     )
         
         return rename_count
@@ -433,6 +440,7 @@ class SonarrHandlerService:
         self,
         torrent_hash: str,
         video_mappings: dict[str, str],
+        torrent_folder: str,
     ) -> int:
         """Process and rename subtitle files using LLM.
         
@@ -441,6 +449,7 @@ class SonarrHandlerService:
         Args:
             torrent_hash: Torrent hash
             video_mappings: Dict of old video paths to new video names
+            torrent_folder: New torrent folder name (from rename_torrent)
             
         Returns:
             Number of subtitles processed
@@ -494,10 +503,13 @@ class SonarrHandlerService:
                     if old_path == new_name:
                         continue
                     
+                    # Construct new path with torrent folder
+                    new_path = f"{torrent_folder}/{new_name}"
+                    
                     await self._qb_service.rename_file(
                         torrent_hash=torrent_hash,
                         old_path=old_path,
-                        new_path=new_name,
+                        new_path=new_path,
                     )
                     
                     processed_count += 1
@@ -506,7 +518,7 @@ class SonarrHandlerService:
                         "Subtitle processed",
                         torrent_hash=torrent_hash,
                         old=old_path[:60],
-                        new=new_name[:60],
+                        new=new_path[:60],
                     )
                 
                 except Exception as e:
@@ -515,7 +527,7 @@ class SonarrHandlerService:
                         error=str(e),
                         torrent_hash=torrent_hash,
                         old_path=old_path[:60],
-                        new_name=new_name[:60],
+                        new_path=f"{torrent_folder}/{new_name}"[:60],
                     )
             
             return processed_count
