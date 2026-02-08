@@ -549,6 +549,8 @@ class SonarrHandlerService:
         """Move all remaining files from old folder to new torrent folder.
         
         This handles files that weren't renamed (like bonus content, extra subtitles, etc.)
+        After rename_torrent, qBittorrent should auto-move files, but it doesn't always work.
+        This method ensures all files end up in the correct folder.
         
         Args:
             torrent_hash: Torrent hash
@@ -565,14 +567,22 @@ class SonarrHandlerService:
                 # Get all files in torrent
                 file_list = await self._qb_service.get_torrent_files(torrent_hash)
                 
-                # Find files still in old folder
+                # Find files NOT in new folder structure
                 files_to_move = []
                 for file in file_list.files:
-                    # Check if file is still in old folder structure
+                    # Skip files already in correct location
+                    if file.name.startswith(torrent_folder + "/"):
+                        continue
+                    
+                    # Check if file is in old folder structure
                     if file.name.startswith(old_torrent_name + "/"):
                         # Extract relative path from old folder
                         relative_path = file.name[len(old_torrent_name) + 1:]
                         files_to_move.append((file.name, relative_path))
+                    else:
+                        # File is at root level (no folder prefix)
+                        # Move it to new folder, keeping just filename
+                        files_to_move.append((file.name, file.name))
                 
                 if not files_to_move:
                     logger.debug(
@@ -585,6 +595,7 @@ class SonarrHandlerService:
                     "Moving remaining files to new folder",
                     torrent_hash=torrent_hash,
                     file_count=len(files_to_move),
+                    old_folder=old_torrent_name[:60],
                     new_folder=torrent_folder[:60],
                 )
                 
