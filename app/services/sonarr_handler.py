@@ -175,6 +175,14 @@ class SonarrHandlerService:
                 subtitles_processed=subtitle_count,
                 series=payload.series.title,
             )
+            
+            # Step 7: Rename torrent for Sonarr to parse correctly
+            await self._rename_torrent_for_sonarr(
+                torrent_hash=torrent.hash,
+                series_name=payload.series.title,
+                season_number=payload.episodes[0].seasonNumber if payload.episodes else 1,
+                episode_numbers=[ep.episodeNumber for ep in payload.episodes],
+            )
         
         except Exception as e:
             logger.error(
@@ -465,4 +473,59 @@ class SonarrHandlerService:
                     )
             
             return processed_count
+    
+    async def _rename_torrent_for_sonarr(
+        self,
+        torrent_hash: str,
+        series_name: str,
+        season_number: int,
+        episode_numbers: list[int],
+    ) -> None:
+        """Rename torrent to a format Sonarr can parse.
+        
+        Args:
+            torrent_hash: Torrent hash
+            series_name: Series name
+            season_number: Season number
+            episode_numbers: List of episode numbers
+        """
+        try:
+            # Build torrent name in Sonarr-parseable format
+            # Format: "Series Name - S01" or "Series Name - S01E01-E12"
+            if len(episode_numbers) > 1:
+                # Multi-episode: "Series Name - S01E01-E12"
+                episode_range = f"E{min(episode_numbers):02d}-E{max(episode_numbers):02d}"
+                new_torrent_name = f"{series_name} - S{season_number:02d}{episode_range}"
+            else:
+                # Single episode: "Series Name - S01E01" or season pack: "Series Name - S01"
+                if episode_numbers:
+                    new_torrent_name = f"{series_name} - S{season_number:02d}E{episode_numbers[0]:02d}"
+                else:
+                    new_torrent_name = f"{series_name} - S{season_number:02d}"
+            
+            logger.info(
+                "Renaming torrent for Sonarr",
+                torrent_hash=torrent_hash,
+                new_name=new_torrent_name[:80],
+            )
+            
+            await self._qb_service.rename_torrent(
+                torrent_hash=torrent_hash,
+                new_name=new_torrent_name,
+            )
+            
+            logger.info(
+                "Torrent renamed successfully",
+                torrent_hash=torrent_hash,
+                new_name=new_torrent_name[:80],
+            )
+        
+        except Exception as e:
+            logger.error(
+                "Failed to rename torrent",
+                error=str(e),
+                torrent_hash=torrent_hash,
+                series_name=series_name,
+            )
+            # Don't raise - this is not critical, files are already renamed
 

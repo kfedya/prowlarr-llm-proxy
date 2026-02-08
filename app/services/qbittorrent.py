@@ -355,3 +355,33 @@ class QBittorrentService:
         )
         
         logger.info("Torrent recheck initiated")
+
+    async def rename_torrent(self, torrent_hash: str, new_name: str) -> None:
+        """Rename torrent (not files inside, but the torrent itself).
+        
+        This renames the display name of the torrent in qBittorrent.
+        This is what Sonarr sees when tracking downloads.
+        
+        Args:
+            torrent_hash: Torrent hash
+            new_name: New display name for the torrent
+            
+        Raises:
+            QBittorrentError: On rename error
+        """
+        logger.info(
+            "Renaming torrent",
+            torrent_hash=torrent_hash,
+            new_name=new_name[:80],
+        )
+        
+        await self._request(
+            "POST",
+            "torrents/rename",
+            data={
+                "hash": torrent_hash,
+                "name": new_name,
+            },
+        )
+        
+        logger.info("Torrent renamed successfully")
