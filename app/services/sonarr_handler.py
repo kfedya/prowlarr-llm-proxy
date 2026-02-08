@@ -180,7 +180,7 @@ class SonarrHandlerService:
             # Step 7: Process subtitles inside the torrent folder
             subtitle_count = await self._process_subtitles(
                 torrent_hash=torrent.hash,
-                name_mappings=name_mappings,
+                video_mappings=name_mappings,
                 torrent_folder=torrent_folder_name,
             )
             
