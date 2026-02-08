@@ -337,7 +337,7 @@ IMPORTANT: Extract episode numbers carefully! Common patterns:
         ]
         
         if episodes:
-            user_prompt_parts.append(f"Expected episodes: {', '.join(f'E{e:02d}' for e in sorted(episodes)[:10])}")
+            user_prompt_parts.append(f"Expected episodes: {', '.join(f'E{e:02d}' for e in sorted(episodes))}")
         
         user_prompt_parts.append("\nFiles to rename:")
         for i, fname in enumerate(file_names, 1):
