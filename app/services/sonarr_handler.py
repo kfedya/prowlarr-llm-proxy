@@ -184,11 +184,19 @@ class SonarrHandlerService:
                 torrent_folder=torrent_folder_name,
             )
             
+            # Step 8: Move remaining files to new folder
+            moved_count = await self._move_remaining_files(
+                torrent_hash=torrent.hash,
+                torrent_folder=torrent_folder_name,
+                old_torrent_name=torrent.name,
+            )
+            
             logger.info(
                 "Processing completed",
                 torrent_hash=torrent.hash,
                 videos_renamed=rename_count,
                 subtitles_processed=subtitle_count,
+                remaining_files_moved=moved_count,
                 series=payload.series.title,
                 torrent_name=torrent_folder_name[:60],
             )
@@ -531,6 +539,99 @@ class SonarrHandlerService:
                     )
             
             return processed_count
+    
+    async def _move_remaining_files(
+        self,
+        torrent_hash: str,
+        torrent_folder: str,
+        old_torrent_name: str,
+    ) -> int:
+        """Move all remaining files from old folder to new torrent folder.
+        
+        This handles files that weren't renamed (like bonus content, extra subtitles, etc.)
+        
+        Args:
+            torrent_hash: Torrent hash
+            torrent_folder: New torrent folder name
+            old_torrent_name: Original torrent name (for detecting old paths)
+            
+        Returns:
+            Number of files moved
+        """
+        moved_count = 0
+        
+        try:
+            async with self._qb_service:
+                # Get all files in torrent
+                file_list = await self._qb_service.get_torrent_files(torrent_hash)
+                
+                # Find files still in old folder
+                files_to_move = []
+                for file in file_list.files:
+                    # Check if file is still in old folder structure
+                    if file.name.startswith(old_torrent_name + "/"):
+                        # Extract relative path from old folder
+                        relative_path = file.name[len(old_torrent_name) + 1:]
+                        files_to_move.append((file.name, relative_path))
+                
+                if not files_to_move:
+                    logger.debug(
+                        "No remaining files to move",
+                        torrent_hash=torrent_hash,
+                    )
+                    return 0
+                
+                logger.info(
+                    "Moving remaining files to new folder",
+                    torrent_hash=torrent_hash,
+                    file_count=len(files_to_move),
+                    new_folder=torrent_folder[:60],
+                )
+                
+                # Move each file to new folder
+                for old_path, relative_path in files_to_move:
+                    try:
+                        new_path = f"{torrent_folder}/{relative_path}"
+                        
+                        await self._qb_service.rename_file(
+                            torrent_hash=torrent_hash,
+                            old_path=old_path,
+                            new_path=new_path,
+                        )
+                        
+                        moved_count += 1
+                        
+                        logger.debug(
+                            "File moved",
+                            torrent_hash=torrent_hash,
+                            old=old_path[:60],
+                            new=new_path[:60],
+                        )
+                    
+                    except Exception as e:
+                        logger.error(
+                            "Failed to move file",
+                            error=str(e),
+                            torrent_hash=torrent_hash,
+                            old_path=old_path[:60],
+                            new_path=f"{torrent_folder}/{relative_path}"[:60],
+                        )
+                
+                logger.info(
+                    "Remaining files moved",
+                    torrent_hash=torrent_hash,
+                    moved=moved_count,
+                    total=len(files_to_move),
+                )
+        
+        except Exception as e:
+            logger.error(
+                "Failed to move remaining files",
+                error=str(e),
+                torrent_hash=torrent_hash,
+            )
+        
+        return moved_count
     
     async def _rename_torrent_for_sonarr(
         self,
