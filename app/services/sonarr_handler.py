@@ -1,4 +1,5 @@
 """Service for handling Sonarr webhook events."""
+import asyncio
 import structlog
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,9 @@ class SonarrHandlerService:
         llm_service: "LLMService | None" = None,
         video_extensions: set[str] | None = None,
         subtitle_extensions: set[str] | None = None,
+        max_retries: int = 10,
+        retry_delay: float = 2.0,
+        retry_backoff: float = 1.5,
     ):
         """Initialize Sonarr handler service.
         
@@ -31,6 +35,9 @@ class SonarrHandlerService:
             llm_service: Service for LLM file normalization (optional)
             video_extensions: Set of video file extensions to process
             subtitle_extensions: Set of subtitle file extensions to process
+            max_retries: Maximum number of retries for getting torrent metadata
+            retry_delay: Initial delay between retries in seconds
+            retry_backoff: Multiplier for retry delay (exponential backoff)
         """
         self._mapping_service = torrent_mapping_service
         self._qb_service = qbittorrent_service
@@ -41,12 +48,17 @@ class SonarrHandlerService:
         self._subtitle_extensions = subtitle_extensions or {
             ".ass", ".srt", ".sub", ".ssa", ".vtt", ".sup"
         }
+        self._max_retries = max_retries
+        self._retry_delay = retry_delay
+        self._retry_backoff = retry_backoff
         
         logger.info(
             "SonarrHandlerService initialized",
             llm_enabled=llm_service is not None,
             video_extensions=self._video_extensions,
             subtitle_extensions=self._subtitle_extensions,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
         )
     
     async def handle_grab_event(self, payload: SonarrGrabWebhook) -> None:
@@ -107,8 +119,13 @@ class SonarrHandlerService:
                 torrent_name=torrent.name[:80],
             )
             
-            # Step 3: Get and filter video files
-            video_files = await self._get_video_files(torrent.hash)
+            # Step 3: Get and filter video files (with retries for metadata)
+            logger.info(
+                "Waiting for torrent metadata to load...",
+                torrent_hash=torrent.hash,
+                max_retries=self._max_retries,
+            )
+            video_files = await self._get_video_files_with_retry(torrent.hash)
             
             if not video_files:
                 logger.warning("No video files found in torrent", torrent_hash=torrent.hash)
@@ -193,6 +210,64 @@ class SonarrHandlerService:
                     return torrent
             
             return None
+    
+    async def _get_video_files_with_retry(self, torrent_hash: str):
+        """Get list of video files from torrent with retry logic.
+        
+        Metadata may not be immediately available after torrent is added.
+        This method retries with exponential backoff.
+        
+        Args:
+            torrent_hash: Torrent hash
+            
+        Returns:
+            List of video files
+        """
+        delay = self._retry_delay
+        
+        for attempt in range(self._max_retries):
+            try:
+                video_files = await self._get_video_files(torrent_hash)
+                
+                if video_files:
+                    if attempt > 0:
+                        logger.info(
+                            "Successfully retrieved video files after retries",
+                            torrent_hash=torrent_hash,
+                            attempt=attempt + 1,
+                            video_count=len(video_files),
+                        )
+                    return video_files
+                
+                # No video files yet - metadata might not be loaded
+                logger.debug(
+                    "No video files found, retrying...",
+                    torrent_hash=torrent_hash,
+                    attempt=attempt + 1,
+                    max_retries=self._max_retries,
+                    retry_in=delay,
+                )
+                
+            except Exception as e:
+                logger.warning(
+                    "Error getting torrent files, retrying...",
+                    torrent_hash=torrent_hash,
+                    attempt=attempt + 1,
+                    error=str(e),
+                    retry_in=delay,
+                )
+            
+            # Wait before retry
+            if attempt < self._max_retries - 1:
+                await asyncio.sleep(delay)
+                delay *= self._retry_backoff
+        
+        logger.error(
+            "Failed to get video files after all retries",
+            torrent_hash=torrent_hash,
+            max_retries=self._max_retries,
+        )
+        return []
     
     async def _get_video_files(self, torrent_hash: str):
         """Get list of video files from torrent.
