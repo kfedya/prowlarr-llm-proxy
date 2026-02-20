@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -42,6 +44,22 @@ class Settings(BaseSettings):
     redis_db: int = Field(default=0, description="Redis database number")
     redis_password: str = Field(default="", description="Redis password (if required)")
     redis_ttl_hours: int = Field(default=48, description="TTL for cached mappings in hours")
+
+    # Path settings
+    download_path: Path = Field(default=Path("/downloads"), description="qBittorrent download directory")
+    sonarr_library_path: Path | None = Field(default=None, description="Sonarr library root (e.g., /tv). Required when Sonarr webhook is used.")
+    radarr_library_path: Path | None = Field(default=None, description="Radarr library root (e.g., /movies). Required when Radarr webhook is used.")
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> "Settings":
+        """Validate configured paths exist. Skip defaults that don't exist (dev/CI)."""
+        if self.download_path != Path("/downloads") and not self.download_path.exists():
+            raise ValueError(f"DOWNLOAD_PATH does not exist: {self.download_path}")
+        if self.sonarr_library_path is not None and not self.sonarr_library_path.exists():
+            raise ValueError(f"SONARR_LIBRARY_PATH does not exist: {self.sonarr_library_path}")
+        if self.radarr_library_path is not None and not self.radarr_library_path.exists():
+            raise ValueError(f"RADARR_LIBRARY_PATH does not exist: {self.radarr_library_path}")
+        return self
 
     model_config = {
         "env_file": ".env",
