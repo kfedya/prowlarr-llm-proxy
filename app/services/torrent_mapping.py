@@ -1,11 +1,18 @@
 """Service for storing and retrieving torrent title mappings."""
 import json
 from datetime import datetime, timedelta
+from enum import Enum
 from typing import Any
 
 import redis.asyncio as redis
 import structlog
 from pydantic import BaseModel, Field
+
+
+class MediaType(str, Enum):
+    """Media type discriminator for TV vs movie content."""
+    TV = "tv"
+    MOVIE = "movie"
 
 logger = structlog.get_logger(__name__)
 
@@ -21,6 +28,8 @@ class TorrentMapping(BaseModel):
     category: str = Field(default="", description="Category ID")
     size: int = Field(default=0, description="Torrent size in bytes")
     download_url: str = Field(default="", description="Download URL or magnet link")
+    media_type: MediaType = Field(default=MediaType.TV, description="Media type (tv or movie)")
+    file_count: int = Field(default=0, description="Number of files in torrent (0 = unknown)")
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
@@ -56,9 +65,11 @@ class TorrentMappingService:
         category: str = "",
         size: int = 0,
         download_url: str = "",
+        media_type: MediaType = MediaType.TV,
+        file_count: int = 0,
     ) -> None:
         """Store a torrent mapping.
-        
+
         Args:
             normalized_title: Normalized title sent to Sonarr
             original_title: Original title from indexer
@@ -68,6 +79,8 @@ class TorrentMappingService:
             category: Category ID
             size: Torrent size in bytes
             download_url: Download URL or magnet
+            media_type: Media type discriminator (tv or movie)
+            file_count: Number of files in torrent
         """
         mapping = TorrentMapping(
             original_title=original_title,
@@ -78,6 +91,8 @@ class TorrentMappingService:
             category=category,
             size=size,
             download_url=download_url,
+            media_type=media_type,
+            file_count=file_count,
         )
         
         # Store by normalized title (primary key for webhook lookup)
