@@ -43,7 +43,10 @@ Plans:
   2. A Torznab request with `t=tvsearch` continues to use the TV-context prompt unchanged
   3. LLM cache keys for the same title differ between `media_type=tv` and `media_type=movie` (no cross-contamination)
   4. TorrentMappingService stores `media_type` alongside each mapping entry
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- Movie prompt, prompt selection, cache key isolation (LLM + mapping services)
+- [ ] 02-02-PLAN.md -- Proxy media type detection and integration wiring
 
 ### Phase 3: HardlinkService
 **Goal**: A standalone, fully testable service creates hardlinks from download dir to library dir with explicit failure on cross-device setups
@@ -89,7 +92,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
-| 2. Radarr Proxy | 0/? | Not started | - |
+| 2. Radarr Proxy | 0/2 | Planned | - |
 | 3. HardlinkService | 0/? | Not started | - |
 | 4. Architecture Refactor | 0/? | Not started | - |
 | 5. Radarr Webhook and Movie Hardlinks | 0/? | Not started | - |

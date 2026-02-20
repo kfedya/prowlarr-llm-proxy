@@ -5,29 +5,30 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Fully automatic pipeline — torrent downloaded → properly named files appear in Sonarr/Radarr library via hardlinks → no manual intervention.
-**Current focus:** Phase 1 - Foundation
+**Current focus:** Phase 2 - Radarr Proxy
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-20 — Completed 01-02 (schema extension and path config)
+Phase: 2 of 5 (Radarr Proxy)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-20 — Completed 02-01 (movie prompt and cache key isolation)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 1.5 min
-- Total execution time: 0.05 hours
+- Total plans completed: 3
+- Average duration: 2.0 min
+- Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 3 min | 1.5 min |
+| 02-radarr-proxy | 1 | 3 min | 3.0 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -35,6 +36,7 @@ Progress: [██░░░░░░░░] 20%
 
 *Updated after each plan completion*
 | Phase 01-foundation P02 | 2min | 2 tasks | 6 files |
+| Phase 02-radarr-proxy P01 | 3min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -49,6 +51,8 @@ Recent decisions affecting current work:
 - Pack update tracking deferred to v2 (APScheduler dependency, state machine complexity)
 - [Phase 01-02]: Used str,Enum mixin for MediaType so Pydantic v2 serializes to tv/movie strings
 - [Phase 01-02]: Path validation lenient for default /downloads path to avoid failures in dev/CI
+- [Phase 02-01]: Independent movie prompt (not shared base with TV) per user constraint
+- [Phase 02-01]: media_type param is str in TorrentMappingService for simple interface
 
 ### Pending Todos
 
@@ -62,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 01-02-PLAN.md (schema extension and path config)
+Stopped at: Completed 02-01-PLAN.md (movie prompt and cache key isolation)
 Resume file: None
