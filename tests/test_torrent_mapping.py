@@ -1,7 +1,10 @@
-"""Tests for TorrentMapping schema extensions."""
+"""Tests for TorrentMapping schema extensions and cache key isolation."""
 import json
+from unittest.mock import AsyncMock
 
-from app.services.torrent_mapping import MediaType, TorrentMapping
+import pytest
+
+from app.services.torrent_mapping import MediaType, TorrentMapping, TorrentMappingService
 
 
 class TestMediaTypeEnum:
@@ -58,3 +61,51 @@ class TestMediaTypeSerialization:
         m2 = TorrentMapping.model_validate_json(dumped)
         assert m2.media_type == MediaType.MOVIE
         assert m2.file_count == 3
+
+
+# --- Normalized cache key tests (Phase 02-01) ---
+
+
+@pytest.fixture()
+def mapping_service():
+    """Create TorrentMappingService with mocked Redis."""
+    mock_redis = AsyncMock()
+    return TorrentMappingService(redis_client=mock_redis)
+
+
+class TestNormalizedCacheKey:
+    def test_cache_key_default_tv(self, mapping_service):
+        key = mapping_service._make_normalized_cache_key("title", "name")
+        assert key == "torrent:normalized:tv|title|name"
+
+    def test_cache_key_movie(self, mapping_service):
+        key = mapping_service._make_normalized_cache_key("title", "name", "movie")
+        assert key == "torrent:normalized:movie|title|name"
+
+    def test_cache_key_tv_movie_differ(self, mapping_service):
+        key_tv = mapping_service._make_normalized_cache_key("title", "name", "tv")
+        key_movie = mapping_service._make_normalized_cache_key("title", "name", "movie")
+        assert key_tv != key_movie
+
+    @pytest.mark.asyncio
+    async def test_store_normalized_cache_with_media_type(self, mapping_service):
+        """store_normalized_cache with media_type='movie' uses movie-prefixed key."""
+        await mapping_service.store_normalized_cache(
+            "orig", "series", "norm", media_type="movie",
+        )
+        call_args = mapping_service._redis.setex.call_args
+        redis_key = call_args[0][0]
+        assert "movie|" in redis_key
+        assert redis_key == "torrent:normalized:movie|orig|series"
+
+    @pytest.mark.asyncio
+    async def test_get_normalized_cache_with_media_type(self, mapping_service):
+        """get_normalized_cache with media_type='movie' queries movie-prefixed key."""
+        mapping_service._redis.get.return_value = b"norm"
+        result = await mapping_service.get_normalized_cache(
+            "orig", "series", media_type="movie",
+        )
+        call_args = mapping_service._redis.get.call_args
+        redis_key = call_args[0][0]
+        assert redis_key == "torrent:normalized:movie|orig|series"
+        assert result == "norm"
