@@ -9,10 +9,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Radarr Proxy
 
-- [ ] **RADR-01**: Proxy distinguishes Radarr from Sonarr requests using Torznab `t=` parameter (movie vs tvsearch)
+- [x] **RADR-01**: Proxy distinguishes Radarr from Sonarr requests using Torznab `t=` parameter (movie vs tvsearch)
 - [x] **RADR-02**: LLMService uses movie-context prompt when normalizing Radarr search results
 - [x] **RADR-03**: LLM cache keys include media_type to prevent TV/movie collisions
-- [ ] **RADR-04**: TorrentMappingService stores media_type (tv or movie) per mapping
+- [x] **RADR-04**: TorrentMappingService stores media_type (tv or movie) per mapping
 
 ### Hardlink File Management
 
@@ -80,10 +80,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ARCH-04 | Phase 1 | Complete |
 | ARCH-05 | Phase 1 | Complete |
 | HDLK-07 | Phase 1 | Complete |
-| RADR-01 | Phase 2 | Pending |
+| RADR-01 | Phase 2 | Complete |
 | RADR-02 | Phase 2 | Complete |
 | RADR-03 | Phase 2 | Complete |
-| RADR-04 | Phase 2 | Pending |
+| RADR-04 | Phase 2 | Complete |
 | HDLK-01 | Phase 3 | Pending |
 | HDLK-04 | Phase 3 | Pending |
 | HDLK-06 | Phase 3 | Pending |
