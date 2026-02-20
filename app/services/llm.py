@@ -1,7 +1,10 @@
 import asyncio
-from openai import AsyncOpenAI
-import structlog
 from dataclasses import dataclass
+
+import structlog
+from openai import AsyncOpenAI
+
+from app.services.torrent_mapping import MediaType
 
 logger = structlog.get_logger()
 
@@ -96,19 +99,100 @@ EXAMPLE OUTPUT:
 3: One Piece - 1123-1155 - [WEBDL-1080p][JA][RU]
 4: One Piece - 1086-1122 - [WEBDL-720p][JA][RU]"""
 
+MOVIE_SYSTEM_PROMPT = """Parse torrent titles for Radarr. You will receive multiple titles numbered [1], [2], etc.
+Output ONLY normalized titles, one per line, in the same order: 1: result, 2: result, etc.
+
+RULE #1 - NAME (CRITICAL - follow EXACTLY):
+You MUST use the "Movie:" field name as-is! DO NOT extract name from the torrent title!
+- The Movie field = exact name Radarr expects
+- NEVER use Russian names
+- NEVER use alternative/translated titles from the torrent
+- ONLY use the Movie field!
+Example: Movie: "The Matrix" -> output MUST start with "The Matrix"
+
+RULE #2 - YEAR (IMPORTANT):
+Extract the release year from the torrent title.
+- Look for 4-digit year in parentheses or after title: (2024), 2024
+- If year is in the torrent title, include it: Movie Name (Year)
+- If year cannot be determined, omit it: Movie Name
+- Do NOT guess the year -- only include if clearly present
+
+RULE #3 - EDITION (preserve if present):
+- Director's Cut, Extended, IMAX, Unrated, etc. -> append after year
+- Format: Movie Name (Year) [Edition] [Quality][Language]
+- If no edition info, omit the edition bracket entirely
+
+RULE #4 - LANGUAGES (IMPORTANT - check carefully!):
+On RuTracker, "+Sub" ALWAYS means Russian subtitles!
+- "ENG+Sub" or "[ENG+Sub]" -> [EN][RU] (English audio + Russian subs)
+- "ENG+RUS" -> [EN][RU]
+- "ENG" alone -> [EN]
+- "RUS" or "DUB" or "Dub" -> [RU]
+- "ENG, RUS" or multi-audio -> [EN][RU]
+- "JAP+Sub" -> [JA][RU]
+
+RULE #5 - QUALITY (ALWAYS include resolution!):
+- WEB-DL 1080p / WEBRip 1080p -> [WEBDL-1080p]
+- WEB-DL 720p / WEBRip 720p -> [WEBDL-720p]
+- WEB-DL 2160p / 4K -> [WEBDL-2160p]
+- BDRip 1080p / Blu-ray 1080p -> [Bluray-1080p]
+- BDRip 720p -> [Bluray-720p]
+- BDRemux / BD Remux 1080p -> Bluray.1080p.Remux (NO brackets!)
+- BDRemux 2160p / 4K Remux -> Bluray.2160p.Remux (NO brackets!)
+- HDTV 1080p -> [HDTV-1080p]
+- HDTV 720p -> [HDTV-720p]
+- DVDRip -> [DVD]
+- If resolution unknown, assume 1080p
+
+RULE #6 - COLLECTION PACKS:
+- If torrent contains multiple movies (collection/pack), normalize the pack title
+- Do NOT split into individual movies
+- Format: Collection Name (Year) [Quality][Language]
+
+FORMAT: {Movie Name} ({Year}) [Quality][Language]
+For editions: {Movie Name} ({Year}) [Edition] [Quality][Language]
+For Remux: {Movie Name} ({Year}) Bluray.1080p.Remux [Language]
+If no year: {Movie Name} [Quality][Language]
+
+EXAMPLE INPUT:
+[1] Title: "Матрица / The Matrix (1999) BDRip 1080p ENG+Sub"
+Movie: The Matrix
+[2] Title: "Начало / Inception (2010) [IMAX] UHD BDRemux 2160p ENG+RUS"
+Movie: Inception
+[3] Title: "Аниме Фильм / Some Anime Movie [JAP+Sub] WEB-DL 1080p"
+Movie: Some Anime Movie
+
+EXAMPLE OUTPUT:
+1: The Matrix (1999) [Bluray-1080p][EN][RU]
+2: Inception (2010) [IMAX] Bluray.2160p.Remux [EN][RU]
+3: Some Anime Movie [WEBDL-1080p][JA][RU]"""
+
+PROMPTS = {
+    MediaType.TV: SYSTEM_PROMPT,
+    MediaType.MOVIE: MOVIE_SYSTEM_PROMPT,
+}
+
 
 @dataclass
 class TorrentItem:
     """Data extracted from a Torznab item."""
     title: str
     category: str = ""
-    series_name: str = ""  # Expected name from Sonarr search query
-    
-    def to_prompt(self) -> str:
-        """Format item data for LLM prompt."""
+    # For TV: series name from Sonarr search query.
+    # For movies: movie name from Radarr search query (dual-purpose field).
+    series_name: str = ""
+
+    def to_prompt(self, media_type: MediaType = MediaType.TV) -> str:
+        """Format item data for LLM prompt.
+
+        Args:
+            media_type: Controls the label used for series_name.
+                        TV -> "Series:", MOVIE -> "Movie:".
+        """
         parts = [f"Title: {self.title}"]
         if self.series_name:
-            parts.append(f"Series: {self.series_name}")
+            label = "Movie" if media_type == MediaType.MOVIE else "Series"
+            parts.append(f"{label}: {self.series_name}")
         if self.category:
             parts.append(f"Category: {self.category}")
         return "\n".join(parts)
@@ -136,56 +220,60 @@ class LLMService:
             redis_cache_enabled=torrent_mapping_service is not None,
         )
 
-    async def _parse_batch(self, items: list[TorrentItem]) -> list[str]:
+    async def _parse_batch(
+        self,
+        items: list[TorrentItem],
+        media_type: MediaType = MediaType.TV,
+    ) -> list[str]:
         """
         Parse a batch of torrent items in a single LLM request.
         Returns list of normalized titles in the same order.
         """
         if not items:
             return []
-        
+
+        prompt = PROMPTS.get(media_type, SYSTEM_PROMPT)
+
         # Build batch prompt
         prompt_parts = []
         for i, item in enumerate(items, 1):
-            part = f"[{i}] Title: \"{item.title}\""
-            if item.series_name:
-                part += f"\nSeries: {item.series_name}"
-            prompt_parts.append(part)
-        
+            prompt_parts.append(f"[{i}] {item.to_prompt(media_type)}")
+
         user_prompt = "\n".join(prompt_parts)
-        
+
         async with self._semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
                     response = await self._client.chat.completions.create(
                         model=self._model,
                         messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "system", "content": prompt},
                             {"role": "user", "content": user_prompt},
                         ],
                         max_tokens=100 * len(items),  # ~100 tokens per result
                         temperature=0.1,
                     )
-                    
+
                     response_text = response.choices[0].message.content.strip()
-                    
+
                     # Parse numbered responses
                     results = self._parse_batch_response(response_text, items)
-                    
+
                     # Cache results in both memory and Redis
                     for item, result in zip(items, results):
                         if result != item.title:
-                            cache_key = f"{item.title}|{item.series_name}"
-                            
+                            cache_key = f"{media_type.value}|{item.title}|{item.series_name}"
+
                             # Store in memory cache
                             self._cache[cache_key] = result
-                            
+
                             # Store in Redis cache (survives restarts)
                             if self._mapping_service:
                                 await self._mapping_service.store_normalized_cache(
                                     item.title,
                                     item.series_name,
                                     result,
+                                    media_type=media_type.value,
                                 )
                             
                             logger.debug("Title normalized", original=item.title[:50], normalized=result)
@@ -246,34 +334,43 @@ class LLMService:
         
         return results
 
-    async def parse_items_batch(self, items: list[TorrentItem]) -> list[str]:
+    async def parse_items_batch(
+        self,
+        items: list[TorrentItem],
+        media_type: MediaType = MediaType.TV,
+    ) -> list[str]:
         """
         Parse multiple torrent items using batching for efficiency.
         Groups items into batches of BATCH_SIZE and processes them in parallel.
         Checks in-memory cache first, then Redis cache, then calls LLM.
+
+        Args:
+            items: List of torrent items to parse.
+            media_type: Media type for prompt selection and cache key isolation.
         """
         if not items:
             return []
-        
+
         # Separate cached and uncached items
         results = [None] * len(items)
         uncached_indices = []
         uncached_items = []
-        
+
         for i, item in enumerate(items):
-            cache_key = f"{item.title}|{item.series_name}"
-            
+            cache_key = f"{media_type.value}|{item.title}|{item.series_name}"
+
             # Check in-memory cache first (fastest)
             if cache_key in self._cache:
                 results[i] = self._cache[cache_key]
                 logger.debug("Memory cache hit", raw_title=item.title[:50])
                 continue
-            
+
             # Check Redis cache second (survives restarts)
             if self._mapping_service:
                 redis_result = await self._mapping_service.get_normalized_cache(
                     item.title,
                     item.series_name,
+                    media_type=media_type.value,
                 )
                 if redis_result:
                     results[i] = redis_result
@@ -281,15 +378,15 @@ class LLMService:
                     self._cache[cache_key] = redis_result
                     logger.debug("Redis cache hit", raw_title=item.title[:50])
                     continue
-            
+
             # Not found in any cache - need to call LLM
             uncached_indices.append(i)
             uncached_items.append(item)
-        
+
         if not uncached_items:
             logger.info("All items from cache", total=len(items))
             return results
-        
+
         logger.info(
             "Starting batch parse",
             total_items=len(items),
@@ -297,21 +394,23 @@ class LLMService:
             to_process=len(uncached_items),
             batch_size=BATCH_SIZE,
         )
-        
+
         # Split into batches
         batches = [
             uncached_items[i:i + BATCH_SIZE]
             for i in range(0, len(uncached_items), BATCH_SIZE)
         ]
-        
+
         # Process batches in parallel (limited by semaphore)
-        batch_results = await asyncio.gather(*[self._parse_batch(batch) for batch in batches])
-        
+        batch_results = await asyncio.gather(
+            *[self._parse_batch(batch, media_type=media_type) for batch in batches]
+        )
+
         # Flatten and map back to original indices
         flat_results = [title for batch in batch_results for title in batch]
         for idx, title in zip(uncached_indices, flat_results):
             results[idx] = title
-        
+
         return results
 
     def clear_cache(self) -> None:
