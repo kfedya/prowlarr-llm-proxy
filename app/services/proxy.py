@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.services.torrent_mapping import TorrentMappingService
 
 from app.services.llm import TorrentItem
+from app.services.torrent_mapping import MediaType
 
 logger = structlog.get_logger()
 
@@ -50,6 +51,16 @@ class ProxyService:
             llm_enabled=self._llm_enabled,
             mapping_enabled=torrent_mapping_service is not None,
         )
+
+    def _get_media_type(self, request: Request) -> MediaType:
+        """Determine media type from Torznab t= parameter.
+
+        Routes: t=movie -> MOVIE, t=tvsearch -> TV, t=search -> TV (default).
+        """
+        t_param = request.query_params.get("t", "")
+        if t_param == "movie":
+            return MediaType.MOVIE
+        return MediaType.TV
 
     def _get_upstream_url(self, request: Request) -> str | None:
         """Get upstream URL based on request port."""
@@ -106,15 +117,21 @@ class ProxyService:
             "download_url": link_match.group(1) if link_match else "",
         }
 
-    async def _process_torznab_response(self, xml_content: str, series_name: str = "") -> str:
+    async def _process_torznab_response(
+        self,
+        xml_content: str,
+        series_name: str = "",
+        media_type: MediaType = MediaType.TV,
+    ) -> str:
         """Process Torznab XML response and normalize titles using LLM.
-        
+
         Extracts title, description, and category for better LLM context.
         Uses regex to preserve original XML structure - only replaces title text.
-        
+
         Args:
             xml_content: The XML response from Prowlarr
-            series_name: The series name from Sonarr's search query (q parameter)
+            series_name: The series name from Sonarr/Radarr search query (q parameter)
+            media_type: Media type for prompt selection (TV or MOVIE)
         """
         if not self._llm_service:
             return xml_content
@@ -127,7 +144,11 @@ class ProxyService:
                 logger.debug("No items found in Torznab response")
                 return xml_content
 
-            logger.info(f"Processing {len(item_matches)} torrent items", series_name=series_name or "unknown")
+            logger.info(
+                f"Processing {len(item_matches)} torrent items",
+                series_name=series_name or "unknown",
+                media_type=media_type.value,
+            )
 
             # Extract data from all items
             torrent_items: list[TorrentItem] = []
@@ -136,7 +157,9 @@ class ProxyService:
                 torrent_items.append(item_data)
 
             # Process all items through LLM
-            normalized_titles = await self._llm_service.parse_items_batch(torrent_items)
+            normalized_titles = await self._llm_service.parse_items_batch(
+                torrent_items, media_type=media_type
+            )
 
             # Build replacement map - we need to replace titles within items
             result = xml_content
@@ -183,6 +206,7 @@ class ProxyService:
                                 category=item_data.category,
                                 size=int(metadata["size"]),
                                 download_url=metadata["download_url"],
+                                media_type=media_type,
                             )
                         except Exception as e:
                             logger.warning(
@@ -260,8 +284,17 @@ class ProxyService:
                 # Extract series name from search query (q parameter)
                 from urllib.parse import unquote
                 series_name = unquote(request.query_params.get("q", ""))
-                logger.info("Processing Torznab search response through LLM", series_name=series_name)
-                response_body = await self._process_torznab_response(response_body, series_name=series_name)
+                media_type = self._get_media_type(request)
+                logger.info(
+                    "Processing Torznab search response through LLM",
+                    series_name=series_name,
+                    media_type=media_type.value,
+                )
+                response_body = await self._process_torznab_response(
+                    response_body,
+                    series_name=series_name,
+                    media_type=media_type,
+                )
                 response_content = response_body.encode("utf-8")
             else:
                 response_content = response.content
