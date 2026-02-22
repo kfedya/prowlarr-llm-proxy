@@ -37,7 +37,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Architecture
 
 - [ ] **ARCH-01**: SonarrHandlerService decomposed into MediaHandlerService (thin orchestrator)
-- [ ] **ARCH-02**: SubtitleService extracted as focused service for subtitle matching and renaming
+- [x] **ARCH-02**: SubtitleService extracted as focused service for subtitle matching and renaming
 - [ ] **ARCH-03**: MediaHandlerService accepts media_type parameter to handle both Sonarr and Radarr
 - [x] **ARCH-04**: Dead code removed (app/services/redis.py)
 - [x] **ARCH-05**: TorrentMappingService schema extended with file_count field
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HDLK-04 | Phase 3 | Complete |
 | HDLK-06 | Phase 3 | Complete |
 | ARCH-01 | Phase 4 | Pending |
-| ARCH-02 | Phase 4 | Pending |
+| ARCH-02 | Phase 4 | Complete |
 | ARCH-03 | Phase 4 | Pending |
 | WHOK-01 | Phase 4 | Pending |
 | HDLK-02 | Phase 5 | Pending |

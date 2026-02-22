@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Fully automatic pipeline — torrent downloaded → properly named files appear in Sonarr/Radarr library via hardlinks → no manual intervention.
-**Current focus:** Phase 3 - Hardlink
+**Current focus:** Phase 4 - Architecture Refactor
 
 ## Current Position
 
-Phase: 3 of 5 (Hardlink) - COMPLETE
-Plan: 1 of 1 in current phase (done)
-Status: Phase 3 complete
-Last activity: 2026-02-23 — Completed 03-01 (HardlinkService with TDD)
+Phase: 4 of 5 (Architecture Refactor) - IN PROGRESS
+Plan: 1 of 2 in current phase (done)
+Status: Executing phase 4
+Last activity: 2026-02-23 — Completed 04-01 (SubtitleService extraction)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 2.0 min
 - Total execution time: 0.2 hours
 
@@ -39,6 +39,7 @@ Progress: [██████░░░░] 60%
 | Phase 02-radarr-proxy P01 | 3min | 3 tasks | 4 files |
 | Phase 02-radarr-proxy P02 | 2min | 2 tasks | 2 files |
 | Phase 03-hardlinkservice P01 | 2min | 2 tasks | 2 files |
+| Phase 04 P01 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,7 @@ Recent decisions affecting current work:
 - [Phase 02.1-01]: NAS repo path is /mnt/user/appdata/prowlarr-llm-proxy/ (not /root/)
 - [Phase 02.1-01]: ROUTES port 8587 points to Prowlarr (9696) not Radarr (7878) — proxy intercepts Torznab
 - [Phase 03-01]: Used os.link(src, dst) over Path.hardlink_to; frozenset ALLOWED_EXTENSIONS; continue+report partial failure; constructor-time cross-device validation
+- [Phase 04-01]: SubtitleService uses frozenset for SUBTITLE_EXTENSIONS; hardlink_path defaults only when use_new_handler=True
 
 ### Pending Todos
 
@@ -77,5 +79,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 03-01-PLAN.md (HardlinkService with TDD)
+Stopped at: Completed 04-01-PLAN.md (SubtitleService extraction)
 Resume file: None
