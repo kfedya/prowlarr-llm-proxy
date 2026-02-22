@@ -81,7 +81,10 @@ Plans:
   3. After a Sonarr grab event, the service polls qBittorrent until torrent metadata resolves and files are created, then creates hardlinks in the Sonarr library path — qBittorrent file rename API is no longer called
   4. After torrent download completes, `MediaHandlerService` calls the Sonarr `RescanSeries` API so Sonarr imports the now-complete files
   5. `MediaHandlerService` accepts a `media_type` parameter so the same orchestration logic handles both TV and movie workflows
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md -- SubtitleService extraction + config settings (USE_NEW_HANDLER, HARDLINK_PATH)
+- [ ] 04-02-PLAN.md -- MediaHandlerService orchestrator + webhook feature flag wiring
 
 ### Phase 5: Radarr Webhook and Movie Hardlinks
 **Goal**: A Radarr grab webhook polls for metadata, creates hardlinks into the Radarr library with correct movie folder structure, waits for download, triggers Radarr rescan; subtitles follow alongside video files
