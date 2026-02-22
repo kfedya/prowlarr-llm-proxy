@@ -16,12 +16,12 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Hardlink File Management
 
-- [ ] **HDLK-01**: HardlinkService creates hardlinks from download dir to library dir using pathlib
+- [x] **HDLK-01**: HardlinkService creates hardlinks from download dir to library dir using pathlib
 - [ ] **HDLK-02**: Hardlinks follow Sonarr folder structure: {library}/{series}/Season {N}/{file}
 - [ ] **HDLK-03**: Hardlinks follow Radarr folder structure: {library}/{movie} ({year})/{file}
-- [ ] **HDLK-04**: Startup validation checks source and target dirs are on the same filesystem
+- [x] **HDLK-04**: Startup validation checks source and target dirs are on the same filesystem
 - [ ] **HDLK-05**: Subtitle files are hardlinked alongside video files with correct naming
-- [ ] **HDLK-06**: Original torrent files remain untouched in qBittorrent download dir for seeding
+- [x] **HDLK-06**: Original torrent files remain untouched in qBittorrent download dir for seeding
 - [x] **HDLK-07**: Config provides DOWNLOAD_PATH, SONARR_LIBRARY_PATH, RADARR_LIBRARY_PATH settings
 
 ### Webhook Processing
@@ -84,9 +84,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RADR-02 | Phase 2 | Complete |
 | RADR-03 | Phase 2 | Complete |
 | RADR-04 | Phase 2 | Complete |
-| HDLK-01 | Phase 3 | Pending |
-| HDLK-04 | Phase 3 | Pending |
-| HDLK-06 | Phase 3 | Pending |
+| HDLK-01 | Phase 3 | Complete |
+| HDLK-04 | Phase 3 | Complete |
+| HDLK-06 | Phase 3 | Complete |
 | ARCH-01 | Phase 4 | Pending |
 | ARCH-02 | Phase 4 | Pending |
 | ARCH-03 | Phase 4 | Pending |

@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 3 of 5 (Hardlink)
-Plan: 1 of N in current phase
-Status: Ready to start
-Last activity: 2026-02-23 — Completed 02.1-01 (deploy and test Radarr proxy on NAS)
+Phase: 3 of 5 (Hardlink) - COMPLETE
+Plan: 1 of 1 in current phase (done)
+Status: Phase 3 complete
+Last activity: 2026-02-23 — Completed 03-01 (HardlinkService with TDD)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 2.0 min
 - Total execution time: 0.2 hours
 
@@ -38,6 +38,7 @@ Progress: [████░░░░░░] 40%
 | Phase 01-foundation P02 | 2min | 2 tasks | 6 files |
 | Phase 02-radarr-proxy P01 | 3min | 3 tasks | 4 files |
 | Phase 02-radarr-proxy P02 | 2min | 2 tasks | 2 files |
+| Phase 03-hardlinkservice P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -58,6 +59,7 @@ Recent decisions affecting current work:
 - [Phase 02.1-01]: PORT_MEDIA_TYPES env var overrides media type for ambiguous t=search by listen port
 - [Phase 02.1-01]: NAS repo path is /mnt/user/appdata/prowlarr-llm-proxy/ (not /root/)
 - [Phase 02.1-01]: ROUTES port 8587 points to Prowlarr (9696) not Radarr (7878) — proxy intercepts Torznab
+- [Phase 03-01]: Used os.link(src, dst) over Path.hardlink_to; frozenset ALLOWED_EXTENSIONS; continue+report partial failure; constructor-time cross-device validation
 
 ### Pending Todos
 
@@ -75,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 02.1-01-PLAN.md (deploy and test Radarr proxy on NAS)
+Stopped at: Completed 03-01-PLAN.md (HardlinkService with TDD)
 Resume file: None

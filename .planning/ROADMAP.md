@@ -66,7 +66,10 @@ Plans:
   2. Original torrent files in the download directory are untouched after hardlink creation (confirmed via inode check)
   3. Startup validation raises a clear error if `DOWNLOAD_PATH` and library paths are on different block devices, and the service does not accept traffic
   4. `HardlinkService` has no dependency on qBittorrent, Sonarr, or any external API — it can be unit-tested with `tmp_path` alone
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 03-01-PLAN.md -- HardlinkService TDD: service implementation + comprehensive tests
 
 ### Phase 4: Architecture Refactor
 **Goal**: `SonarrHandlerService` monolith is replaced by a thin `MediaHandlerService` orchestrator and focused collaborators; Sonarr webhook flow polls for metadata, creates hardlinks early, waits for download, triggers rescan
