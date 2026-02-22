@@ -48,6 +48,15 @@ Plans:
 - [ ] 02-01-PLAN.md -- Movie prompt, prompt selection, cache key isolation (LLM + mapping services)
 - [ ] 02-02-PLAN.md -- Proxy media type detection and integration wiring
 
+### Phase 02.1: Deploy and test Radarr proxy on NAS (INSERTED)
+
+**Goal:** Phase 2 Radarr proxy code is deployed on the NAS with zero downtime, movie and TV searches validated via curl, and Radarr configured to use the proxy
+**Depends on:** Phase 2
+**Plans:** 1 plan
+
+Plans:
+- [x] 02.1-01-PLAN.md -- Zero-downtime deploy, search validation, and Radarr indexer config (2026-02-23)
+
 ### Phase 3: HardlinkService
 **Goal**: A standalone, fully testable service creates hardlinks from download dir to library dir with explicit failure on cross-device setups
 **Depends on**: Phase 1

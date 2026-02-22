@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 Phase: 3 of 5 (Hardlink)
 Plan: 1 of N in current phase
 Status: Ready to start
-Last activity: 2026-02-20 — Completed 02-02 (media type detection and proxy routing)
+Last activity: 2026-02-23 — Completed 02.1-01 (deploy and test Radarr proxy on NAS)
 
 Progress: [████░░░░░░] 40%
 
@@ -55,10 +55,17 @@ Recent decisions affecting current work:
 - [Phase 02-01]: Independent movie prompt (not shared base with TV) per user constraint
 - [Phase 02-01]: media_type param is str in TorrentMappingService for simple interface
 - [Phase 02-02]: Route purely on t= parameter; t=search defaults to TV preserving existing behavior
+- [Phase 02.1-01]: PORT_MEDIA_TYPES env var overrides media type for ambiguous t=search by listen port
+- [Phase 02.1-01]: NAS repo path is /mnt/user/appdata/prowlarr-llm-proxy/ (not /root/)
+- [Phase 02.1-01]: ROUTES port 8587 points to Prowlarr (9696) not Radarr (7878) — proxy intercepts Torznab
 
 ### Pending Todos
 
 None yet.
+
+### Roadmap Evolution
+
+- Phase 02.1 inserted after Phase 2: Deploy and test Radarr proxy on NAS (URGENT)
 
 ### Blockers/Concerns
 
@@ -67,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed 02-02-PLAN.md (media type detection and proxy routing)
+Last session: 2026-02-23
+Stopped at: Completed 02.1-01-PLAN.md (deploy and test Radarr proxy on NAS)
 Resume file: None
