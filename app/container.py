@@ -7,6 +7,7 @@ from app.services.proxy import ProxyService
 from app.services.qbittorrent import QBittorrentService
 from app.services.torrent_mapping import TorrentMappingService
 from app.services.sonarr_handler import SonarrHandlerService
+from app.services.subtitle import SubtitleService
 
 
 class Container(containers.DeclarativeContainer):
@@ -67,6 +68,12 @@ class Container(containers.DeclarativeContainer):
         username=config.provided.qbittorrent_username,
         password=config.provided.qbittorrent_password,
         timeout=config.provided.qbittorrent_timeout,
+    )
+
+    # Subtitle Service
+    subtitle_service = providers.Singleton(
+        SubtitleService,
+        llm_service=llm_service,
     )
 
     # Sonarr Handler Service
