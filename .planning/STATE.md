@@ -9,18 +9,18 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 4 of 5 (Architecture Refactor) - IN PROGRESS
-Plan: 1 of 2 in current phase (done)
-Status: Executing phase 4
-Last activity: 2026-02-23 — Completed 04-01 (SubtitleService extraction)
+Phase: 4 of 5 (Architecture Refactor) - COMPLETE
+Plan: 2 of 2 in current phase (done)
+Status: Phase 4 complete, ready for phase 5
+Last activity: 2026-02-23 — Completed 04-02 (MediaHandlerService orchestrator)
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 2.0 min
+- Total plans completed: 7
+- Average duration: 2.3 min
 - Total execution time: 0.2 hours
 
 **By Phase:**
@@ -40,6 +40,7 @@ Progress: [███████░░░] 70%
 | Phase 02-radarr-proxy P02 | 2min | 2 tasks | 2 files |
 | Phase 03-hardlinkservice P01 | 2min | 2 tasks | 2 files |
 | Phase 04 P01 | 2min | 2 tasks | 4 files |
+| Phase 04 P02 | 4min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,7 @@ Recent decisions affecting current work:
 - [Phase 02.1-01]: ROUTES port 8587 points to Prowlarr (9696) not Radarr (7878) — proxy intercepts Torznab
 - [Phase 03-01]: Used os.link(src, dst) over Path.hardlink_to; frozenset ALLOWED_EXTENSIONS; continue+report partial failure; constructor-time cross-device validation
 - [Phase 04-01]: SubtitleService uses frozenset for SUBTITLE_EXTENSIONS; hardlink_path defaults only when use_new_handler=True
+- [Phase 04-02]: HardlinkService wrapped in factory function for dev/CI compatibility; subtitle hardlinks in same subfolder as video; polling returns empty list on timeout
 
 ### Pending Todos
 
@@ -79,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 04-01-PLAN.md (SubtitleService extraction)
+Stopped at: Completed 04-02-PLAN.md (MediaHandlerService orchestrator)
 Resume file: None

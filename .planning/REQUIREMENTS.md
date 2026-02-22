@@ -26,19 +26,19 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Webhook Processing
 
-- [ ] **WHOK-01**: Sonarr Grab webhook triggers hardlink creation instead of qBittorrent file renaming
+- [x] **WHOK-01**: Sonarr Grab webhook triggers hardlink creation instead of qBittorrent file renaming
 - [ ] **WHOK-02**: Radarr Grab webhook endpoint exists at POST /webhook/radarr/grab
 - [ ] **WHOK-03**: Radarr Grab webhook triggers hardlink creation for movie files
 - [ ] **WHOK-04**: RadarrGrabWebhook Pydantic model validates Radarr webhook payloads
-- [ ] **WHOK-05**: Hardlink creation triggers after torrent metadata resolves and files are created in qBittorrent (polling qBit API for file list)
+- [x] **WHOK-05**: Hardlink creation triggers after torrent metadata resolves and files are created in qBittorrent (polling qBit API for file list)
 - [ ] **WHOK-06**: Sonarr RescanSeries API called after torrent download completes to ensure Sonarr imports files
 - [ ] **WHOK-07**: Radarr RescanMovie API called after torrent download completes to ensure Radarr imports files
 
 ### Architecture
 
-- [ ] **ARCH-01**: SonarrHandlerService decomposed into MediaHandlerService (thin orchestrator)
+- [x] **ARCH-01**: SonarrHandlerService decomposed into MediaHandlerService (thin orchestrator)
 - [x] **ARCH-02**: SubtitleService extracted as focused service for subtitle matching and renaming
-- [ ] **ARCH-03**: MediaHandlerService accepts media_type parameter to handle both Sonarr and Radarr
+- [x] **ARCH-03**: MediaHandlerService accepts media_type parameter to handle both Sonarr and Radarr
 - [x] **ARCH-04**: Dead code removed (app/services/redis.py)
 - [x] **ARCH-05**: TorrentMappingService schema extended with file_count field
 
@@ -87,17 +87,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HDLK-01 | Phase 3 | Complete |
 | HDLK-04 | Phase 3 | Complete |
 | HDLK-06 | Phase 3 | Complete |
-| ARCH-01 | Phase 4 | Pending |
+| ARCH-01 | Phase 4 | Complete |
 | ARCH-02 | Phase 4 | Complete |
-| ARCH-03 | Phase 4 | Pending |
-| WHOK-01 | Phase 4 | Pending |
+| ARCH-03 | Phase 4 | Complete |
+| WHOK-01 | Phase 4 | Complete |
 | HDLK-02 | Phase 5 | Pending |
 | HDLK-03 | Phase 5 | Pending |
 | HDLK-05 | Phase 5 | Pending |
 | WHOK-02 | Phase 5 | Pending |
 | WHOK-03 | Phase 5 | Pending |
 | WHOK-04 | Phase 5 | Pending |
-| WHOK-05 | Phase 4 | Pending |
+| WHOK-05 | Phase 4 | Complete |
 | WHOK-06 | Phase 4 | Pending |
 | WHOK-07 | Phase 5 | Pending |
 
