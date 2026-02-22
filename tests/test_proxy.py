@@ -18,10 +18,12 @@ SAMPLE_XML = '''<?xml version="1.0" encoding="UTF-8"?>
 </channel></rss>'''
 
 
-def _make_request(query_params: dict | None = None) -> MagicMock:
-    """Create a mock Request with the given query params."""
+def _make_request(query_params: dict | None = None, port: int = 80) -> MagicMock:
+    """Create a mock Request with the given query params and port."""
     request = MagicMock()
     request.query_params = query_params or {}
+    request.url.port = port
+    request.headers = {}
     return request
 
 
@@ -64,6 +66,54 @@ class TestMediaTypeDetection:
     def test_book_param_returns_tv(self):
         request = _make_request({"t": "book"})
         assert self.proxy._get_media_type(request) == MediaType.TV
+
+
+class TestPortBasedMediaType:
+    """Tests for port-based media type detection via PORT_MEDIA_TYPES."""
+
+    def test_search_on_movie_port_returns_movie(self):
+        proxy = ProxyService(
+            routes={8587: "http://localhost:9696"},
+            timeout=10.0,
+            port_media_types={8587: "movie"},
+        )
+        request = _make_request({"t": "search"}, port=8587)
+        assert proxy._get_media_type(request) == MediaType.MOVIE
+
+    def test_search_on_tv_port_returns_tv(self):
+        proxy = ProxyService(
+            routes={8585: "http://localhost:8989"},
+            timeout=10.0,
+            port_media_types={8587: "movie"},
+        )
+        request = _make_request({"t": "search"}, port=8585)
+        assert proxy._get_media_type(request) == MediaType.TV
+
+    def test_explicit_tvsearch_on_movie_port_still_returns_tv(self):
+        """Explicit t=tvsearch takes priority over port mapping."""
+        proxy = ProxyService(
+            routes={8587: "http://localhost:9696"},
+            timeout=10.0,
+            port_media_types={8587: "movie"},
+        )
+        request = _make_request({"t": "tvsearch"}, port=8587)
+        assert proxy._get_media_type(request) == MediaType.TV
+
+    def test_explicit_movie_param_works_without_port_mapping(self):
+        proxy = ProxyService(
+            routes={80: "http://localhost:9696"},
+            timeout=10.0,
+        )
+        request = _make_request({"t": "movie"}, port=80)
+        assert proxy._get_media_type(request) == MediaType.MOVIE
+
+    def test_no_port_mapping_search_defaults_to_tv(self):
+        proxy = ProxyService(
+            routes={80: "http://localhost:9696"},
+            timeout=10.0,
+        )
+        request = _make_request({"t": "search"}, port=80)
+        assert proxy._get_media_type(request) == MediaType.TV
 
 
 class TestProcessTorznabResponseMediaType:

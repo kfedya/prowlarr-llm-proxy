@@ -37,8 +37,15 @@ class ProxyService:
         llm_service: "LLMService | None" = None,
         llm_enabled: bool = True,
         torrent_mapping_service: "TorrentMappingService | None" = None,
+        port_media_types: dict[int, str] | None = None,
     ):
         self._routes = {int(k): v.rstrip("/") for k, v in routes.items()}
+        self._port_media_types: dict[int, MediaType] = {}
+        for port, mt in (port_media_types or {}).items():
+            if mt.lower() == "movie":
+                self._port_media_types[int(port)] = MediaType.MOVIE
+            else:
+                self._port_media_types[int(port)] = MediaType.TV
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
         self._llm_service = llm_service
@@ -53,13 +60,32 @@ class ProxyService:
         )
 
     def _get_media_type(self, request: Request) -> MediaType:
-        """Determine media type from Torznab t= parameter.
+        """Determine media type from Torznab t= parameter and listen port.
 
-        Routes: t=movie -> MOVIE, t=tvsearch -> TV, t=search -> TV (default).
+        Priority:
+        1. t=movie -> MOVIE (explicit Torznab movie search)
+        2. t=tvsearch -> TV (explicit Torznab TV search)
+        3. Port-based override from PORT_MEDIA_TYPES (for t=search which is ambiguous)
+        4. Default -> TV
         """
         t_param = request.query_params.get("t", "")
         if t_param == "movie":
             return MediaType.MOVIE
+        if t_param == "tvsearch":
+            return MediaType.TV
+
+        # For ambiguous t=search, use port-based detection
+        if self._port_media_types:
+            port = request.url.port or 80
+            forwarded_port = request.headers.get("x-forwarded-port")
+            if forwarded_port:
+                try:
+                    port = int(forwarded_port)
+                except ValueError:
+                    pass
+            if port in self._port_media_types:
+                return self._port_media_types[port]
+
         return MediaType.TV
 
     def _get_upstream_url(self, request: Request) -> str | None:

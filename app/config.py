@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     port: int = Field(default=8080, description="Port to listen on")
     upstream_url: str = Field(default="http://localhost:8989", description="Upstream URL")
 
+    # Port-to-media-type mapping: JSON mapping of port -> media type
+    # Example: {"8587": "movie"} — forces all searches on port 8587 to use movie prompt
+    # Ports not listed default to media type detection from Torznab t= parameter
+    port_media_types: str = Field(
+        default="{}",
+        description="JSON mapping of listen ports to media types (movie/tv)",
+    )
+
     # Proxy settings
     proxy_timeout: float = Field(default=60.0, description="Proxy request timeout in seconds")
 
@@ -66,6 +74,16 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
+    def get_port_media_types(self) -> dict[int, str]:
+        """Parse port_media_types JSON into dict of port -> media type string."""
+        try:
+            mapping = json.loads(self.port_media_types)
+            if mapping:
+                return {int(k): v for k, v in mapping.items()}
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return {}
 
     def get_routes(self) -> dict[int, str]:
         """Parse routes JSON into dict of port -> upstream URL."""

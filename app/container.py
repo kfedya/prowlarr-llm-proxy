@@ -57,6 +57,7 @@ class Container(containers.DeclarativeContainer):
         llm_service=llm_service,
         llm_enabled=config.provided.llm_enabled,
         torrent_mapping_service=torrent_mapping_service,
+        port_media_types=config.provided.get_port_media_types.call(),
     )
 
     # qBittorrent Service
