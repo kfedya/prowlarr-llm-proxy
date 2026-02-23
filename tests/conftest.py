@@ -8,17 +8,14 @@ import pytest
 def tmp_paths(tmp_path: Path) -> dict[str, Path]:
     """Create temporary directory structure for path tests."""
     downloads = tmp_path / "downloads"
-    tv = tmp_path / "tv"
-    movies = tmp_path / "movies"
+    hardlinks = tmp_path / "hardlinks"
 
     downloads.mkdir()
-    tv.mkdir()
-    movies.mkdir()
+    hardlinks.mkdir()
 
     return {
         "downloads": downloads,
-        "tv": tv,
-        "movies": movies,
+        "hardlinks": hardlinks,
     }
 
 
@@ -26,8 +23,7 @@ def tmp_paths(tmp_path: Path) -> dict[str, Path]:
 def test_settings(monkeypatch: pytest.MonkeyPatch, tmp_paths: dict[str, Path]):
     """Create Settings instance with temporary paths."""
     monkeypatch.setenv("DOWNLOAD_PATH", str(tmp_paths["downloads"]))
-    monkeypatch.setenv("SONARR_LIBRARY_PATH", str(tmp_paths["tv"]))
-    monkeypatch.setenv("RADARR_LIBRARY_PATH", str(tmp_paths["movies"]))
+    monkeypatch.setenv("HARDLINK_PATH", str(tmp_paths["hardlinks"]))
 
     from app.config import Settings
 

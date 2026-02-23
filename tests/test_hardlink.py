@@ -37,7 +37,7 @@ class TestCrossDeviceValidation:
         lib = tmp_path / "library"
         dl.mkdir()
         lib.mkdir()
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         assert svc is not None
 
     def test_cross_device_raises(self, tmp_path: Path):
@@ -47,7 +47,7 @@ class TestCrossDeviceValidation:
         # /proc is always a different filesystem on Linux; /dev on macOS
         cross_path = Path("/proc") if Path("/proc").exists() else Path("/dev")
         with pytest.raises(CrossDeviceError):
-            HardlinkService(download_path=dl, library_paths=[cross_path])
+            HardlinkService(download_path=dl, hardlinks_path=cross_path)
 
 
 class TestCreateHardlinks:
@@ -64,7 +64,7 @@ class TestCreateHardlinks:
         src.write_text("video content")
         dst = lib / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
 
         assert len(result.created) == 1
@@ -82,7 +82,7 @@ class TestCreateHardlinks:
         src.write_text("content")
         dst = lib / "file.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         svc.create_hardlinks([(src, dst)])
 
         assert src.stat().st_ino == dst.stat().st_ino
@@ -104,7 +104,7 @@ class TestCreateHardlinks:
 
         os.link(src, dst)
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
 
         assert len(result.skipped) == 1
@@ -121,7 +121,7 @@ class TestCreateHardlinks:
         src.write_text("video content")
         dst = lib / "deep" / "nested" / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
 
         assert len(result.created) == 1
@@ -141,7 +141,7 @@ class TestCreateHardlinks:
             dst = lib / f"file{i}.mkv"
             pairs.append((src, dst))
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks(pairs)
 
         assert len(result.created) == 3
@@ -157,7 +157,7 @@ class TestCreateHardlinks:
         src.write_text("original content")
         dst = lib / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         svc.create_hardlinks([(src, dst)])
 
         assert src.read_text() == "original content"
@@ -176,7 +176,7 @@ class TestCreateHardlinks:
         bad_src = dl / "nonexistent.mkv"  # Does not exist
         bad_dst = lib / "nonexistent.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(good_src, good_dst), (bad_src, bad_dst)])
 
         assert len(result.created) == 1
@@ -198,7 +198,7 @@ class TestDryRun:
         src.write_text("video content")
         dst = lib / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib], dry_run=True)
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib, dry_run=True)
         result = svc.create_hardlinks([(src, dst)])
 
         assert len(result.created) == 1  # Shows what WOULD happen
@@ -215,7 +215,7 @@ class TestDryRun:
         src.write_text("video content")
         dst = lib / "deep" / "nested" / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib], dry_run=True)
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib, dry_run=True)
         svc.create_hardlinks([(src, dst)])
 
         assert not (lib / "deep").exists()
@@ -233,7 +233,7 @@ class TestFileFiltering:
         src.write_text("video")
         dst = lib / "movie.mkv"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.created) == 1
 
@@ -246,7 +246,7 @@ class TestFileFiltering:
         src.write_text("video")
         dst = lib / "movie.mp4"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.created) == 1
 
@@ -259,7 +259,7 @@ class TestFileFiltering:
         src.write_text("subtitle")
         dst = lib / "subs.srt"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.created) == 1
 
@@ -272,7 +272,7 @@ class TestFileFiltering:
         src.write_text("audio")
         dst = lib / "audio.mka"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.created) == 1
 
@@ -285,7 +285,7 @@ class TestFileFiltering:
         src.write_text("nfo data")
         dst = lib / "info.nfo"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.skipped) == 1
         assert len(result.created) == 0
@@ -300,7 +300,7 @@ class TestFileFiltering:
         src.write_text("text")
         dst = lib / "readme.txt"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.skipped) == 1
         assert not dst.exists()
@@ -314,7 +314,7 @@ class TestFileFiltering:
         src.write_text("image")
         dst = lib / "cover.jpg"
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks([(src, dst)])
         assert len(result.skipped) == 1
         assert not dst.exists()
@@ -333,7 +333,7 @@ class TestFileFiltering:
             dst = lib / name
             pairs.append((src, dst))
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks(pairs)
 
         assert len(result.created) == 2

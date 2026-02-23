@@ -54,6 +54,7 @@ def _make_service(
     torrent_return=None,
     file_list_return=None,
     hardlink_result=None,
+    hardlink_path=None,
 ) -> tuple[MediaHandlerService, dict]:
     """Build MediaHandlerService with mocked dependencies.
 
@@ -80,8 +81,7 @@ def _make_service(
         hardlink_service=mock_hardlink,
         subtitle_service=mock_subtitle,
         download_path=tmp_path,
-        sonarr_library_path=tmp_path / "tv",
-        radarr_library_path=tmp_path / "movies",
+        hardlink_path=hardlink_path or (tmp_path / "hardlinks"),
     )
 
     mocks = {
@@ -121,7 +121,7 @@ class TestHandleGrabEventHappyPath:
 
     @pytest.mark.asyncio
     @patch("app.services.media_handler.asyncio.sleep", new_callable=AsyncMock)
-    async def test_happy_path(self, mock_sleep, tmp_path: Path):
+    async def test_happy_path_tv(self, mock_sleep, tmp_path: Path):
         # Create real files on disk so Path.exists() returns True
         dl_dir = tmp_path / "torrents" / "Test.Torrent"
         dl_dir.mkdir(parents=True)
@@ -149,13 +149,15 @@ class TestHandleGrabEventHappyPath:
         )
 
         # Hardlinks should be called
-        mocks["hardlink"].create_hardlinks.assert_called_once()
+        mocks["hardlink"].create_hardlinks.assert_called()
         call_args = mocks["hardlink"].create_hardlinks.call_args[0][0]
         assert len(call_args) == 1
         src, dst = call_args[0]
         assert src == dl_dir / "episode.mkv"
-        assert "tv" in str(dst)
-        assert "Test Show/Season 01" in str(dst)
+        # TV: flat in hardlinks/{Series Name}/
+        assert "Test Show" in str(dst)
+        # Should NOT have Season subfolder in new flat layout
+        assert "Season" not in str(dst)
 
         # No qBit rename methods should be called
         mocks["qb"].rename_file.assert_not_called()
@@ -195,109 +197,157 @@ class TestPollTimeout:
         mocks["hardlink"].create_hardlinks.assert_not_called()
 
 
-class TestMakeSubfolderNameTV:
-    """TV subfolder naming -- nested '{Title}/Season {NN}' format."""
+class TestComputeTVHardlinkPairs:
+    """TV hardlink pair computation — flat layout with LLM name mapping."""
 
-    def test_single_episode(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="My Show",
-            season_number=2,
-            episode_numbers=[3],
-        )
-        assert name == "My Show/Season 02"
-
-    def test_multi_episode(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="My Show",
-            season_number=1,
-            episode_numbers=[1, 2, 3, 12],
-        )
-        assert name == "My Show/Season 01"
-
-    def test_season_pack(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="My Show",
-            season_number=3,
-            episode_numbers=None,
-        )
-        assert name == "My Show/Season 03"
-
-    def test_no_season(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="My Show",
-            season_number=None,
-            episode_numbers=None,
-        )
-        assert name == "My Show"
-
-    def test_sanitizes_slashes_in_title(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="Title/With\\Slashes",
-            season_number=1,
-            episode_numbers=[1],
-        )
-        # The title portion should have slashes replaced; the nested separator / is allowed
-        assert name == "Title-With-Slashes/Season 01"
-
-
-class TestMakeSubfolderNameMovie:
-    """Movie subfolder naming."""
-
-    def test_with_year(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.MOVIE,
-            title="Cool Movie",
-            season_number=None,
-            episode_numbers=None,
-            year=2024,
-        )
-        assert name == "Cool Movie (2024)"
-
-    def test_without_year(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.MOVIE,
-            title="Cool Movie",
-            season_number=None,
-            episode_numbers=None,
-        )
-        assert name == "Cool Movie"
-
-
-class TestComputeHardlinkPairs:
-    """Hardlink pair computation."""
-
-    def test_computes_pairs(self, tmp_path: Path):
-        files = [
-            tmp_path / "torrent" / "ep1.mkv",
-            tmp_path / "torrent" / "ep2.mkv",
-        ]
+    def test_uses_llm_mapping(self, tmp_path: Path):
+        """LLM-mapped name is used as destination filename."""
+        video_files = [tmp_path / "Show.S01E01.mkv"]
+        name_mapping = {"Show.S01E01.mkv": "Show - S01E01.mkv"}
         hardlink_base = tmp_path / "hardlinks"
 
-        pairs = MediaHandlerService._compute_hardlink_pairs(
-            files=files,
+        pairs = MediaHandlerService._compute_tv_hardlink_pairs(
+            video_files=video_files,
+            name_mapping=name_mapping,
+            series_title="Show",
             hardlink_base=hardlink_base,
-            subfolder_name="Show - S01",
+        )
+
+        assert len(pairs) == 1
+        src, dst = pairs[0]
+        assert src == video_files[0]
+        assert dst == hardlink_base / "Show" / "Show - S01E01.mkv"
+
+    def test_fallback_to_original_name(self, tmp_path: Path):
+        """Falls back to original name when LLM mapping is empty."""
+        video_files = [tmp_path / "ep.mkv"]
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_tv_hardlink_pairs(
+            video_files=video_files,
+            name_mapping={},
+            series_title="My Show",
+            hardlink_base=hardlink_base,
+        )
+
+        assert len(pairs) == 1
+        src, dst = pairs[0]
+        assert src == video_files[0]
+        assert dst == hardlink_base / "My Show" / "ep.mkv"
+
+    def test_flat_layout_no_season_folder(self, tmp_path: Path):
+        """TV hardlinks are flat in {series}/ — no Season subfolder."""
+        video_files = [tmp_path / "ep1.mkv", tmp_path / "ep2.mkv"]
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_tv_hardlink_pairs(
+            video_files=video_files,
+            name_mapping={},
+            series_title="The Show",
+            hardlink_base=hardlink_base,
+        )
+
+        for src, dst in pairs:
+            # Should be exactly: hardlinks/The Show/<filename>
+            assert dst.parent == hardlink_base / "The Show"
+
+    def test_sanitizes_series_title(self, tmp_path: Path):
+        """Series titles with unsafe chars are sanitized."""
+        video_files = [tmp_path / "ep.mkv"]
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_tv_hardlink_pairs(
+            video_files=video_files,
+            name_mapping={},
+            series_title="Show: The Return",
+            hardlink_base=hardlink_base,
+        )
+
+        _, dst = pairs[0]
+        assert "Show - The Return" in str(dst)
+
+
+class TestComputeMovieHardlinkPairs:
+    """Movie hardlink pair computation — preserve torrent-relative structure."""
+
+    def test_single_file_torrent(self, tmp_path: Path):
+        """Single file at save_path root."""
+        save_path = tmp_path / "downloads"
+        save_path.mkdir()
+        src = save_path / "Movie.2024.mkv"
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_movie_hardlink_pairs(
+            files_on_disk=[src],
+            save_path=save_path,
+            movie_title="Cool Movie",
+            year=2024,
+            hardlink_base=hardlink_base,
+        )
+
+        assert len(pairs) == 1
+        _, dst = pairs[0]
+        assert dst == hardlink_base / "Cool Movie (2024)" / "Movie.2024.mkv"
+
+    def test_multi_file_torrent_preserves_structure(self, tmp_path: Path):
+        """Multi-file torrent preserves relative path under movie folder."""
+        save_path = tmp_path / "downloads"
+        torrent_dir = save_path / "Movie.2024.BluRay"
+        torrent_dir.mkdir(parents=True)
+
+        src1 = torrent_dir / "movie.mkv"
+        src2 = torrent_dir / "extras" / "making-of.mkv"
+        (torrent_dir / "extras").mkdir()
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_movie_hardlink_pairs(
+            files_on_disk=[src1, src2],
+            save_path=save_path,
+            movie_title="Movie",
+            year=2024,
+            hardlink_base=hardlink_base,
         )
 
         assert len(pairs) == 2
-        assert pairs[0] == (files[0], hardlink_base / "Show - S01" / "ep1.mkv")
-        assert pairs[1] == (files[1], hardlink_base / "Show - S01" / "ep2.mkv")
+        dsts = [dst for _, dst in pairs]
+        assert hardlink_base / "Movie (2024)" / "Movie.2024.BluRay" / "movie.mkv" in dsts
+        assert hardlink_base / "Movie (2024)" / "Movie.2024.BluRay" / "extras" / "making-of.mkv" in dsts
 
-    def test_strips_directory_prefix(self, tmp_path: Path):
-        """Destination uses only file.name, not the full directory structure."""
-        src = tmp_path / "deep" / "nested" / "dir" / "video.mkv"
-        pairs = MediaHandlerService._compute_hardlink_pairs(
-            files=[src],
-            hardlink_base=tmp_path / "hl",
-            subfolder_name="sub",
+    def test_no_year(self, tmp_path: Path):
+        """Without year, folder is just the title."""
+        save_path = tmp_path / "downloads"
+        save_path.mkdir()
+        src = save_path / "Movie.mkv"
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_movie_hardlink_pairs(
+            files_on_disk=[src],
+            save_path=save_path,
+            movie_title="Cool Movie",
+            year=None,
+            hardlink_base=hardlink_base,
         )
+
         _, dst = pairs[0]
-        assert dst == tmp_path / "hl" / "sub" / "video.mkv"
+        assert dst.parts[-2] == "Cool Movie"
+
+    def test_sanitizes_movie_title(self, tmp_path: Path):
+        """Movie titles with unsafe chars are sanitized."""
+        save_path = tmp_path / "downloads"
+        save_path.mkdir()
+        src = save_path / "movie.mkv"
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_movie_hardlink_pairs(
+            files_on_disk=[src],
+            save_path=save_path,
+            movie_title="Movie: Revenge",
+            year=2024,
+            hardlink_base=hardlink_base,
+        )
+
+        _, dst = pairs[0]
+        assert "Movie - Revenge (2024)" in str(dst)
 
 
 class TestHardlinkFailureAborts:
@@ -336,20 +386,15 @@ class TestHardlinkFailureAborts:
         )
 
         # Hardlinks called but subtitle processing should not happen
-        # (subtitle service's filter_subtitle_files should NOT be called
-        #  from _process_subtitles since handler aborted)
         mocks["hardlink"].create_hardlinks.assert_called_once()
-        # Verify no further qBit calls after hardlink (subtitle processing
-        # would call get_torrent_by_hash again)
-        # The qb mock was called during polling, but not again for subtitles
-        initial_call_count = mocks["qb"].get_torrent_by_hash.call_count
         # Since handle_grab_event returned after hardlink error,
         # the subtitle processing qb calls didn't happen
+        initial_call_count = mocks["qb"].get_torrent_by_hash.call_count
         assert initial_call_count >= 1  # at least polling calls
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 tests: library-path routing, movie behavior, sanitization
+# Phase 5 tests: sanitization, movie behavior
 # ---------------------------------------------------------------------------
 
 
@@ -380,29 +425,6 @@ class TestSanitizeTitle:
     def test_combined_unsafe_chars(self):
         result = MediaHandlerService._sanitize_title('Movie: Part 2 *Extended* "Cut"...')
         assert result == "Movie - Part 2 Extended Cut"
-
-
-class TestMakeSubfolderUnsafeChars:
-    """Subfolder name with filesystem-unsafe characters in title."""
-
-    def test_tv_with_colon(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.TV,
-            title="Show: The Return",
-            season_number=1,
-            episode_numbers=[1],
-        )
-        assert name == "Show - The Return/Season 01"
-
-    def test_movie_with_colon_and_year(self):
-        name = MediaHandlerService._make_subfolder_name(
-            media_type=MediaType.MOVIE,
-            title="Movie: Revenge",
-            season_number=None,
-            episode_numbers=None,
-            year=2024,
-        )
-        assert name == "Movie - Revenge (2024)"
 
 
 class TestMovieBehavior:
@@ -475,22 +497,21 @@ class TestMovieBehavior:
         assert kwargs["filter_extensions"] is False
 
     @pytest.mark.asyncio
-    async def test_aborts_when_library_path_none(self, tmp_path: Path):
-        """handle_grab_event aborts when library path is None for the media type."""
+    async def test_aborts_when_hardlink_path_none(self, tmp_path: Path):
+        """handle_grab_event aborts when hardlink_path is None."""
         mock_mapping = AsyncMock()
         mock_qb = AsyncMock()
         mock_hardlink = MagicMock()
         mock_subtitle = MagicMock()
 
-        # Create service with NO radarr_library_path
+        # Create service with NO hardlink_path
         svc = MediaHandlerService(
             torrent_mapping_service=mock_mapping,
             qbittorrent_service=mock_qb,
             hardlink_service=mock_hardlink,
             subtitle_service=mock_subtitle,
             download_path=tmp_path,
-            sonarr_library_path=tmp_path / "tv",
-            radarr_library_path=None,
+            hardlink_path=None,
         )
 
         await svc.handle_grab_event(
@@ -525,7 +546,7 @@ class TestHardlinkFilterExtensions:
             dst = lib / name
             pairs.append((src, dst))
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks(pairs, filter_extensions=False)
 
         assert len(result.created) == 4
@@ -547,7 +568,7 @@ class TestHardlinkFilterExtensions:
             dst = lib / name
             pairs.append((src, dst))
 
-        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        svc = HardlinkService(download_path=dl, hardlinks_path=lib)
         result = svc.create_hardlinks(pairs, filter_extensions=True)
 
         assert len(result.created) == 1  # only .mkv
