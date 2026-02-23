@@ -55,25 +55,24 @@ class Settings(BaseSettings):
 
     # Path settings
     download_path: Path = Field(default=Path("/downloads"), description="qBittorrent download directory")
-    sonarr_library_path: Path | None = Field(default=None, description="Sonarr library root (e.g., /tv). Required when Sonarr webhook is used.")
-    radarr_library_path: Path | None = Field(default=None, description="Radarr library root (e.g., /movies). Required when Radarr webhook is used.")
 
     # New handler settings
     use_new_handler: bool = Field(default=False, description="Use new MediaHandlerService instead of SonarrHandlerService")
-    hardlink_path: Path | None = Field(default=None, description="Hardlink destination directory (default: {download_path}/hardlinks)")
+    hardlink_path: Path | None = Field(
+        default=None,
+        description="Hardlink staging directory. Defaults to {download_path}/hardlinks when USE_NEW_HANDLER=true."
+    )
 
     @model_validator(mode="after")
     def validate_paths(self) -> "Settings":
         """Validate configured paths exist. Skip defaults that don't exist (dev/CI)."""
         if self.download_path != Path("/downloads") and not self.download_path.exists():
             raise ValueError(f"DOWNLOAD_PATH does not exist: {self.download_path}")
-        if self.sonarr_library_path is not None and not self.sonarr_library_path.exists():
-            raise ValueError(f"SONARR_LIBRARY_PATH does not exist: {self.sonarr_library_path}")
-        if self.radarr_library_path is not None and not self.radarr_library_path.exists():
-            raise ValueError(f"RADARR_LIBRARY_PATH does not exist: {self.radarr_library_path}")
         # Default hardlink_path when use_new_handler is enabled
         if self.hardlink_path is None and self.use_new_handler:
             self.hardlink_path = self.download_path / "hardlinks"
+        if self.hardlink_path is not None and not self.hardlink_path.exists():
+            raise ValueError(f"HARDLINK_PATH does not exist: {self.hardlink_path}")
         return self
 
     model_config = {
