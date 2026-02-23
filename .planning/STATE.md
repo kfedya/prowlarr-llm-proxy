@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 5 of 5 (Radarr Webhook and Movie Hardlinks)
-Plan: 1 of 2 in current phase (done)
-Status: Plan 05-01 complete, ready for 05-02
-Last activity: 2026-02-23 — Completed 05-01 (Radarr webhook and library-path hardlinks)
+Plan: 2 of 2 in current phase (done)
+Status: Phase 05 complete -- all plans executed
+Last activity: 2026-02-23 — Completed 05-02 (Subtitle language detection and renaming)
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 2.3 min
 - Total execution time: 0.2 hours
 
@@ -42,6 +42,7 @@ Progress: [█████████░] 90%
 | Phase 04 P01 | 2min | 2 tasks | 4 files |
 | Phase 04 P02 | 4min | 3 tasks | 4 files |
 | Phase 05 P01 | 5min | 3 tasks | 7 files |
+| Phase 05 P02 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - [Phase 04-02]: HardlinkService wrapped in factory function for dev/CI compatibility; subtitle hardlinks in same subfolder as video; polling returns empty list on timeout
 - [Phase 05-01]: No feature flag for Radarr endpoint -- direct to MediaHandlerService; no rescan API call (hardlinks fill in-place)
 - [Phase 05-01]: TV nested subfolder format {Title}/Season {NN}; movies hardlink ALL files (filter_extensions=False); _sanitize_title for filesystem-safe paths
+- [Phase 05-02]: LANGUAGE_MAP as module-level dict; unknown language subtitles keep original filename; first video file used as rename base
 
 ### Pending Todos
 
@@ -84,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 05-01-PLAN.md (Radarr webhook and library-path hardlinks)
+Stopped at: Completed 05-02-PLAN.md (Subtitle language detection and renaming) -- Phase 05 complete
 Resume file: None

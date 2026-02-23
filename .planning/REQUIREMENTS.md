@@ -20,7 +20,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **HDLK-02**: Hardlinks follow Sonarr folder structure: {library}/{series}/Season {N}/{file}
 - [x] **HDLK-03**: Hardlinks follow Radarr folder structure: {library}/{movie} ({year})/{file}
 - [x] **HDLK-04**: Startup validation checks source and target dirs are on the same filesystem
-- [ ] **HDLK-05**: Subtitle files are hardlinked alongside video files with correct naming
+- [x] **HDLK-05**: Subtitle files are hardlinked alongside video files with correct naming
 - [x] **HDLK-06**: Original torrent files remain untouched in qBittorrent download dir for seeding
 - [x] **HDLK-07**: Config provides DOWNLOAD_PATH, SONARR_LIBRARY_PATH, RADARR_LIBRARY_PATH settings
 
@@ -93,7 +93,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHOK-01 | Phase 4 | Complete |
 | HDLK-02 | Phase 5 | Complete |
 | HDLK-03 | Phase 5 | Complete |
-| HDLK-05 | Phase 5 | Pending |
+| HDLK-05 | Phase 5 | Complete |
 | WHOK-02 | Phase 5 | Complete |
 | WHOK-03 | Phase 5 | Complete |
 | WHOK-04 | Phase 5 | Complete |
