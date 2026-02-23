@@ -7,6 +7,7 @@ import json
 
 from app.config import Settings
 from app.container import Container
+from app.models.radarr import RadarrGrabWebhook
 from app.models.sonarr import SonarrGrabWebhook
 from app.services.media_handler import MediaHandlerService
 from app.services.sonarr_handler import SonarrHandlerService
@@ -126,6 +127,86 @@ async def handle_sonarr_grab(
         "message": "Grab event queued for processing",
         "series": payload.series.title,
         "episodes": len(payload.episodes),
+    }
+
+
+@router.post("/radarr/grab")
+@inject
+async def handle_radarr_grab(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    media_handler: MediaHandlerService = Depends(Provide[Container.media_handler_service]),
+) -> dict:
+    """Handle Radarr Grab event webhook.
+
+    Routes directly to MediaHandlerService (no feature flag).
+    No Radarr rescan API call -- hardlinks fill in-place.
+
+    Args:
+        request: Raw HTTP request
+        background_tasks: FastAPI background tasks
+        media_handler: Media handler service (injected)
+
+    Returns:
+        Success message
+    """
+    body = await request.body()
+    body_str = body.decode("utf-8")
+
+    try:
+        json_data = json.loads(body_str)
+        logger.debug("Received Radarr webhook payload", keys=list(json_data.keys()) if isinstance(json_data, dict) else None)
+    except Exception:
+        pass
+
+    # Parse payload
+    try:
+        payload = RadarrGrabWebhook.model_validate_json(body_str)
+    except Exception as e:
+        logger.error("Failed to parse Radarr webhook payload", error=str(e), body_preview=body_str[:500])
+        raise HTTPException(status_code=422, detail=f"Invalid payload: {str(e)}")
+
+    # Handle test webhook from Radarr
+    if payload.eventType == "Test":
+        logger.info("Received Radarr test webhook")
+        return {
+            "status": "ok",
+            "message": "Webhook endpoint is working correctly",
+        }
+
+    if payload.eventType != "Grab":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid event type: {payload.eventType}. Expected 'Grab'",
+        )
+
+    # Validate required fields for Grab event
+    if not payload.movie or not payload.release:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required fields for Grab event",
+        )
+
+    logger.info(
+        "Received Radarr Grab webhook",
+        movie=payload.movie.title,
+        year=payload.movie.year,
+        release=payload.release.releaseTitle[:80],
+    )
+
+    background_tasks.add_task(
+        media_handler.handle_grab_event,
+        release_title=payload.release.releaseTitle,
+        download_id=payload.downloadId,
+        media_type=MediaType.MOVIE,
+        movie_title=payload.movie.title,
+        year=payload.movie.year,
+    )
+
+    return {
+        "status": "accepted",
+        "message": "Grab event queued",
+        "movie": payload.movie.title,
     }
 
 
