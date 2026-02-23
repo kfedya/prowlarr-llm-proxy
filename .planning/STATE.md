@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Fully automatic pipeline — torrent downloaded → properly named files appear in Sonarr/Radarr library via hardlinks → no manual intervention.
-**Current focus:** Phase 5 - Radarr Webhook and Movie Hardlinks
+**Current focus:** Phase 6 - NAS Deploy and E2E Validation
 
 ## Current Position
 
-Phase: 5 of 5 (Radarr Webhook and Movie Hardlinks)
-Plan: 2 of 2 in current phase (done)
-Status: Phase 05 complete -- all plans executed
-Last activity: 2026-02-23 — Completed 05-02 (Subtitle language detection and renaming)
+Phase: 6 of 6 (NAS Deploy and E2E Validation)
+Plan: 1 of 2 in current phase (done)
+Status: 06-01 complete -- container deployed with hardlink volume mounts
+Last activity: 2026-02-23 — Completed 06-01 (NAS deploy with volume mounts)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 2.3 min
-- Total execution time: 0.2 hours
+- Total plans completed: 9
+- Average duration: 2.6 min
+- Total execution time: 0.4 hours
 
 **By Phase:**
 
@@ -43,6 +43,7 @@ Progress: [██████████] 100%
 | Phase 04 P02 | 4min | 3 tasks | 4 files |
 | Phase 05 P01 | 5min | 3 tasks | 7 files |
 | Phase 05 P02 | 2min | 2 tasks | 3 files |
+| Phase 06 P01 | 5min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,7 @@ Recent decisions affecting current work:
 - [Phase 05-01]: No feature flag for Radarr endpoint -- direct to MediaHandlerService; no rescan API call (hardlinks fill in-place)
 - [Phase 05-01]: TV nested subfolder format {Title}/Season {NN}; movies hardlink ALL files (filter_extensions=False); _sanitize_title for filesystem-safe paths
 - [Phase 05-02]: LANGUAGE_MAP as module-level dict; unknown language subtitles keep original filename; first video file used as rename base
+- [Phase 06-01]: NAS paths: /data/downloads (not /data/torrents), /data/tv and /data/movies (not /data/media/*); single mount /mnt/user/data:/data
 
 ### Pending Todos
 
@@ -86,5 +88,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 05-02-PLAN.md (Subtitle language detection and renaming) -- Phase 05 complete
+Stopped at: Completed 06-01-PLAN.md (NAS deploy with volume mounts and infrastructure verification)
 Resume file: None

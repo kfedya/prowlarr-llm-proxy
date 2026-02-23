@@ -119,7 +119,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- Deploy container with volume mounts, .env config, infrastructure verification
+- [x] 06-01-PLAN.md -- Deploy container with volume mounts, .env config, infrastructure verification (2026-02-23)
 - [ ] 06-02-PLAN.md -- E2E validation: Sonarr/Radarr grabs, hardlink inode checks, subtitle test, cleanup
 
 ## Progress
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. HardlinkService | 1/1 | Complete | 2026-02-23 |
 | 4. Architecture Refactor | 2/2 | Complete | 2026-02-23 |
 | 5. Radarr Webhook and Movie Hardlinks | 2/2 | Complete | 2026-02-23 |
-| 6. NAS Deploy and E2E Validation | 0/? | Not started | - |
+| 6. NAS Deploy and E2E Validation | 1/2 | In progress | - |
