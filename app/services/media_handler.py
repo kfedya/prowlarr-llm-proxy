@@ -23,9 +23,13 @@ if TYPE_CHECKING:
     from app.services.subtitle import SubtitleService
     from app.services.torrent_mapping import TorrentMappingService
 
+from app.services.subtitle import SubtitleService
 from app.services.torrent_mapping import MediaType
 
 logger = structlog.get_logger(__name__)
+
+# Video file extensions for finding the primary video in a torrent
+VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mkv", ".mp4", ".avi", ".wmv", ".flv", ".mov"})
 
 # Polling constants
 FAST_INTERVAL = 2.0  # seconds between polls during fast phase
@@ -429,7 +433,14 @@ class MediaHandlerService:
                     count=len(subtitle_names),
                 )
 
-                # Build subtitle hardlink pairs directly
+                # Find the first video file in the torrent for subtitle renaming
+                video_name: str | None = None
+                for f in file_list.files:
+                    if Path(f.name).suffix.lower() in VIDEO_EXTENSIONS:
+                        video_name = Path(f.name).name
+                        break
+
+                # Build subtitle hardlink pairs with language-aware renaming
                 # Subtitles are hardlinked to the same subfolder as video files
                 save_path = Path(torrent.save_path)
                 subtitle_pairs: list[tuple[Path, Path]] = []
@@ -437,7 +448,14 @@ class MediaHandlerService:
                 for sub_name in subtitle_names:
                     src = save_path / sub_name
                     if src.exists():
-                        dst = library_base / subfolder / Path(sub_name).name
+                        sub_basename = Path(sub_name).name
+                        if video_name:
+                            dst_name = SubtitleService.rename_subtitle_with_language(
+                                sub_basename, video_name
+                            )
+                        else:
+                            dst_name = sub_basename
+                        dst = library_base / subfolder / dst_name
                         subtitle_pairs.append((src, dst))
 
                 if subtitle_pairs and self._hardlink_service:
