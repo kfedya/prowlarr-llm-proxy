@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: HardlinkService** - Isolated filesystem service creates hardlinks with startup validation and no side effects on torrent files
 - [ ] **Phase 4: Architecture Refactor** - Monolith decomposed into focused services; Sonarr webhook creates hardlinks after metadata, triggers rescan after download
 - [ ] **Phase 5: Radarr Webhook and Movie Hardlinks** - Radarr grab webhook creates hardlinks after metadata, triggers Radarr rescan after download
+- [ ] **Phase 6: NAS Deploy and E2E Validation** - Full stack deployed on NAS with USE_NEW_HANDLER=true, all webhook flows validated end-to-end
 
 ## Phase Details
 
@@ -102,15 +103,32 @@ Plans:
 - [ ] 05-01-PLAN.md -- Radarr webhook model + endpoint + library-path-aware hardlinks + movie behavior
 - [ ] 05-02-PLAN.md -- Subtitle language detection for TV (ISO 639-2 renaming)
 
+### Phase 6: NAS Deploy and E2E Validation
+**Goal**: Deploy full v1.0 stack on NAS with `USE_NEW_HANDLER=true`, validate all webhook flows end-to-end with real torrents, confirm hardlinks appear in correct library paths, and verify subtitle language renaming works in practice
+**Depends on**: Phase 5
+**Requirements**: None (validation phase — verifies existing requirements work in production)
+**Gap Closure**: Covers all human verification items from milestone audit
+**Success Criteria** (what must be TRUE):
+  1. Proxy running on NAS with `USE_NEW_HANDLER=true`, `SONARR_LIBRARY_PATH`, and `RADARR_LIBRARY_PATH` configured
+  2. Sonarr grab webhook triggers hardlink creation at `{SONARR_LIBRARY_PATH}/{Series}/Season {N}/` — confirmed via filesystem check
+  3. Radarr grab webhook triggers hardlink creation at `{RADARR_LIBRARY_PATH}/{Movie} ({Year})/` — confirmed via filesystem check
+  4. Original torrent files remain in qBittorrent download dir (inode count > 1 confirms hardlink, not copy)
+  5. Radarr Test webhook returns 200 OK without triggering processing
+  6. TV subtitle files appear with `.eng.srt` / `.rus.srt` language suffix naming
+  7. Legacy `USE_NEW_HANDLER=false` path still works for Sonarr (fallback verified)
+**Plans:** TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/2 | Planned | - |
-| 2. Radarr Proxy | 0/2 | Planned | - |
-| 3. HardlinkService | 0/? | Not started | - |
-| 4. Architecture Refactor | 0/? | Not started | - |
-| 5. Radarr Webhook and Movie Hardlinks | 0/? | Not started | - |
+| 1. Foundation | 2/2 | Complete | 2026-02-20 |
+| 2. Radarr Proxy | 2/2 | Complete | 2026-02-20 |
+| 2.1 Deploy (INSERTED) | 1/1 | Complete | 2026-02-23 |
+| 3. HardlinkService | 1/1 | Complete | 2026-02-23 |
+| 4. Architecture Refactor | 2/2 | Complete | 2026-02-23 |
+| 5. Radarr Webhook and Movie Hardlinks | 2/2 | Complete | 2026-02-23 |
+| 6. NAS Deploy and E2E Validation | 0/? | Not started | - |
