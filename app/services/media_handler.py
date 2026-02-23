@@ -51,8 +51,9 @@ class MediaHandlerService:
     Flow: webhook -> lookup mapping -> poll qBit for metadata -> verify files on disk
     -> compute hardlink pairs -> create hardlinks -> process subtitles.
 
-    TV files: LLM-normalized names, placed flat in hardlink_path/{Series Name}/.
-    Movie files: torrent-relative structure preserved under hardlink_path/{Movie (Year)}/.
+    TV files: LLM-normalized names, placed flat in hardlink_path/{torrent.name}/.
+    Movie files: torrent-relative structure preserved under hardlink_path/{torrent.name}/ (multi-file).
+    Single-file movies: placed flat in hardlink_path/{filename} (no wrapper folder).
 
     No qBittorrent rename API calls. No rescan trigger (files fill in-place).
     """
@@ -135,8 +136,10 @@ class MediaHandlerService:
 
             # Step 2: Incremental polling loop — hardlink files as they appear on disk
             hardlinked: set[Path] = set()
+            hardlinked_subs: set[str] = set()  # subtitle files already hardlinked (torrent-relative paths)
             all_video_mappings: dict[str, str] = {}  # accumulated for subtitle processing
             save_path: Path | None = None
+            torrent_name: str | None = None
             elapsed = 0.0
 
             while elapsed < MAX_TIMEOUT:
@@ -162,6 +165,7 @@ class MediaHandlerService:
                             continue
 
                         save_path = Path(torrent.save_path)
+                        torrent_name = torrent.name
                         torrent_done = torrent.state in COMPLETED_STATES
 
                         file_list = await self._qb_service.get_torrent_files(download_id)
@@ -197,8 +201,18 @@ class MediaHandlerService:
                                     episode_numbers=episode_numbers,
                                     hardlink_base=hardlink_base,
                                     download_id=download_id,
+                                    torrent_name=torrent_name,
                                 )
                                 all_video_mappings.update(batch_mappings)
+                                # Process subtitles incrementally alongside videos
+                                await self._process_subtitles_incremental(
+                                    download_id=download_id,
+                                    save_path=save_path,
+                                    video_mappings=all_video_mappings,
+                                    torrent_name=torrent_name,
+                                    hardlink_base=hardlink_base,
+                                    already_hardlinked_subs=hardlinked_subs,
+                                )
                             else:
                                 await self._handle_movie_grab(
                                     files_on_disk=new_files,
@@ -207,6 +221,7 @@ class MediaHandlerService:
                                     year=year,
                                     hardlink_base=hardlink_base,
                                     total_files=total_expected,
+                                    torrent_name=torrent_name,
                                 )
                             hardlinked.update(new_files)
 
@@ -241,16 +256,6 @@ class MediaHandlerService:
                 )
                 return
 
-            # Step 3: Process subtitles once at the end (TV only)
-            if media_type == MediaType.TV and save_path is not None:
-                await self._process_subtitles(
-                    download_id=download_id,
-                    save_path=save_path,
-                    video_mappings=all_video_mappings,
-                    series_title=resolved_series,
-                    hardlink_base=hardlink_base,
-                )
-
             logger.info(
                 "Grab event processing completed",
                 title=title_label,
@@ -275,8 +280,9 @@ class MediaHandlerService:
         episode_numbers: list[int] | None,
         hardlink_base: Path,
         download_id: str,
+        torrent_name: str,
     ) -> dict[str, str]:
-        """Handle TV grab: LLM-normalize file names, hardlink flat into {series}/.
+        """Handle TV grab: LLM-normalize file names, hardlink flat into {torrent_name}/.
 
         Returns the name_mapping (old_name -> new_name) for subtitle accumulation.
         """
@@ -298,12 +304,13 @@ class MediaHandlerService:
             except Exception as e:
                 logger.warning("LLM normalization failed, using original names", error=str(e))
 
-        # 3. Compute TV hardlink pairs (flat, LLM-renamed)
+        # 3. Compute TV hardlink pairs (flat, LLM-renamed, torrent_name subfolder)
         pairs = self._compute_tv_hardlink_pairs(
             video_files=video_files,
             name_mapping=name_mapping,
             series_title=series_title,
             hardlink_base=hardlink_base,
+            torrent_name=torrent_name,
         )
 
         logger.info("Computed TV hardlink pairs", pair_count=len(pairs))
@@ -324,8 +331,9 @@ class MediaHandlerService:
         year: int | None,
         hardlink_base: Path,
         total_files: int = 1,
+        torrent_name: str = "",
     ) -> None:
-        """Handle movie grab: preserve torrent-relative structure under {Movie (Year)}/."""
+        """Handle movie grab: single-file flat in hardlink_base, multi-file under {torrent_name}/."""
         pairs = self._compute_movie_hardlink_pairs(
             files_on_disk=files_on_disk,
             save_path=save_path,
@@ -333,6 +341,7 @@ class MediaHandlerService:
             year=year,
             hardlink_base=hardlink_base,
             total_files=total_files,
+            torrent_name=torrent_name,
         )
 
         logger.info("Computed movie hardlink pairs", pair_count=len(pairs))
@@ -351,17 +360,24 @@ class MediaHandlerService:
         name_mapping: dict[str, str],
         series_title: str,
         hardlink_base: Path,
+        torrent_name: str = "",
     ) -> list[tuple[Path, Path]]:
         """Compute (src, dst) hardlink pairs for TV files.
 
-        Files are placed flat in hardlink_base/{Series Name}/ with LLM-normalized names.
+        Files are placed flat in hardlink_base/{torrent_name}/ with LLM-normalized names.
         Falls back to original name if LLM mapping not available.
+
+        The subfolder uses torrent_name (sanitized) so Sonarr/Radarr Remote Path Mapping
+        resolves correctly: content_path = {save_path}/{torrent.name} -> hardlinks/{torrent.name}.
+        series_title is kept for LLM context only, not used for the destination directory.
         """
-        safe_series = MediaHandlerService._sanitize_title(series_title)
+        # Use torrent_name as subfolder if provided, else fall back to series_title
+        folder_source = torrent_name if torrent_name else series_title
+        safe_torrent = MediaHandlerService._sanitize_title(folder_source)
         pairs = []
         for src in video_files:
             dst_name = name_mapping.get(src.name, src.name)
-            dst = hardlink_base / safe_series / dst_name
+            dst = hardlink_base / safe_torrent / dst_name
             pairs.append((src, dst))
         return pairs
 
@@ -373,19 +389,27 @@ class MediaHandlerService:
         year: int | None,
         hardlink_base: Path,
         total_files: int = 1,
+        torrent_name: str = "",
     ) -> list[tuple[Path, Path]]:
         """Compute (src, dst) hardlink pairs for movie files.
 
         Single-file torrent (total_files==1): hardlink_base/{filename} (no wrapper folder).
-        Multi-file torrent: hardlink_base/{Movie (Year)}/{torrent-relative path}.
+        Multi-file torrent: hardlink_base/{torrent_name}/{torrent-relative path}.
+
+        The torrent_name subfolder (not movie_title) is used so Sonarr/Radarr Remote Path
+        Mapping can resolve content_path = {save_path}/{torrent.name} -> hardlinks/{torrent.name}.
         """
         if total_files == 1:
             src = files_on_disk[0]
             dst = hardlink_base / src.name
             return [(src, dst)]
 
-        safe_title = MediaHandlerService._sanitize_title(movie_title)
-        folder = f"{safe_title} ({year})" if year else safe_title
+        # Multi-file: use torrent_name as subfolder if provided, else fall back to movie title
+        if torrent_name:
+            safe_torrent = MediaHandlerService._sanitize_title(torrent_name)
+        else:
+            safe_title = MediaHandlerService._sanitize_title(movie_title)
+            safe_torrent = f"{safe_title} ({year})" if year else safe_title
 
         pairs = []
         for src in files_on_disk:
@@ -393,7 +417,7 @@ class MediaHandlerService:
                 relative = src.relative_to(save_path)
             except ValueError:
                 relative = Path(src.name)
-            dst = hardlink_base / folder / relative
+            dst = hardlink_base / safe_torrent / relative
             pairs.append((src, dst))
         return pairs
 
@@ -410,24 +434,28 @@ class MediaHandlerService:
         safe = safe.rstrip(". ")
         return safe
 
-    async def _process_subtitles(
+    async def _process_subtitles_incremental(
         self,
         download_id: str,
         save_path: Path,
         video_mappings: dict[str, str],
-        series_title: str,
+        torrent_name: str,
         hardlink_base: Path,
+        already_hardlinked_subs: set[str],
     ) -> None:
         """Find subtitle files in the torrent and create hardlinks for them.
 
-        Only called for TV media type. Movies hardlink all files as-is.
+        Called incrementally inside the polling loop (for TV media type only).
+        Movies hardlink all files as-is via _handle_movie_grab.
 
         Args:
             download_id: Torrent hash / download ID.
             save_path: Torrent save path (root of torrent files).
             video_mappings: LLM mapping of old_video_name -> new_video_name.
-            series_title: Series title for destination directory.
+            torrent_name: qBittorrent torrent.name — used as destination subfolder.
             hardlink_base: Hardlink staging root path.
+            already_hardlinked_subs: Set of torrent-relative sub paths already hardlinked.
+                Mutated in place — newly hardlinked subs are added after processing.
         """
         try:
             async with self._qb_service:
@@ -439,7 +467,7 @@ class MediaHandlerService:
                 if not file_list.files:
                     return
 
-                # Filter subtitle files
+                # Filter subtitle files (returns torrent-relative paths)
                 subtitle_names = self._subtitle_service.filter_subtitle_files(
                     file_list.files
                 )
@@ -447,33 +475,48 @@ class MediaHandlerService:
                     logger.debug("No subtitle files found in torrent")
                     return
 
+                # Only process subs not yet hardlinked
+                new_subs = [s for s in subtitle_names if s not in already_hardlinked_subs]
+                if not new_subs:
+                    return
+
                 logger.info(
                     "Found subtitle files",
-                    count=len(subtitle_names),
+                    count=len(new_subs),
                 )
 
                 # Use LLM to match subtitles to video files with normalization
+                # Keys in subtitle_mappings are full torrent-relative paths (e.g. "Group/01.ass")
                 subtitle_mappings: dict[str, str] = {}
                 if video_mappings:
                     try:
                         subtitle_mappings = await self._subtitle_service.match_subtitles_to_videos(
-                            subtitle_files=subtitle_names,
+                            subtitle_files=new_subs,
                             video_mappings=video_mappings,
                         )
                     except Exception as e:
                         logger.warning("Subtitle LLM matching failed, using original names", error=str(e))
 
-                # Build subtitle hardlink pairs
-                safe_series = MediaHandlerService._sanitize_title(series_title)
+                # Build subtitle hardlink pairs using torrent_name subfolder
+                safe_torrent = MediaHandlerService._sanitize_title(torrent_name)
                 subtitle_pairs: list[tuple[Path, Path]] = []
+                successfully_hardlinked: list[str] = []
 
-                for sub_name in subtitle_names:
+                for sub_name in new_subs:
                     src = save_path / sub_name
                     if src.exists():
-                        sub_basename = Path(sub_name).name
-                        new_name = subtitle_mappings.get(sub_basename, sub_basename)
-                        dst = hardlink_base / safe_series / new_name
+                        # Use LLM mapping (full torrent-relative path as key) or preserve group dir
+                        new_name = subtitle_mappings.get(sub_name, None)
+                        if new_name:
+                            # LLM gave a flat name like "Show.S01E01.rus.SovetRomantica.ass"
+                            dst = hardlink_base / safe_torrent / new_name
+                        else:
+                            # No LLM mapping: preserve group directory for disambiguation.
+                            # e.g. sub_name = "Cqur Far/01.ass" -> dst = hardlinks/{torrent}/Cqur Far/01.ass
+                            # This prevents same-filename collision across subtitle groups.
+                            dst = hardlink_base / safe_torrent / sub_name
                         subtitle_pairs.append((src, dst))
+                        successfully_hardlinked.append(sub_name)
 
                 if subtitle_pairs and self._hardlink_service:
                     result = self._hardlink_service.create_hardlinks(subtitle_pairs)
@@ -483,6 +526,8 @@ class MediaHandlerService:
                         skipped=len(result.skipped),
                         errors=len(result.errors),
                     )
+                    # Mark successfully attempted subs as done (avoid retrying every poll)
+                    already_hardlinked_subs.update(successfully_hardlinked)
 
         except Exception as e:
             logger.warning(

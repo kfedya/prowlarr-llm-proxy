@@ -154,8 +154,8 @@ class TestHandleGrabEventHappyPath:
         assert len(call_args) == 1
         src, dst = call_args[0]
         assert src == dl_dir / "episode.mkv"
-        # TV: flat in hardlinks/{Series Name}/
-        assert "Test Show" in str(dst)
+        # TV: flat in hardlinks/{torrent_name}/ — torrent.name is "Test.Torrent"
+        assert "Test.Torrent" in str(dst)
         # Should NOT have Season subfolder in new flat layout
         assert "Season" not in str(dst)
 
@@ -252,7 +252,7 @@ class TestComputeTVHardlinkPairs:
             assert dst.parent == hardlink_base / "The Show"
 
     def test_sanitizes_series_title(self, tmp_path: Path):
-        """Series titles with unsafe chars are sanitized."""
+        """Series titles with unsafe chars are sanitized (fallback when torrent_name not given)."""
         video_files = [tmp_path / "ep.mkv"]
         hardlink_base = tmp_path / "hardlinks"
 
@@ -265,6 +265,24 @@ class TestComputeTVHardlinkPairs:
 
         _, dst = pairs[0]
         assert "Show - The Return" in str(dst)
+
+    def test_uses_torrent_name_as_subfolder(self, tmp_path: Path):
+        """When torrent_name is provided, it is used as the staging subfolder (not series_title)."""
+        video_files = [tmp_path / "ep.mkv"]
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_tv_hardlink_pairs(
+            video_files=video_files,
+            name_mapping={},
+            series_title="Some Series",
+            hardlink_base=hardlink_base,
+            torrent_name="Anime.S01.BDRip.1080p [GroupTag]",
+        )
+
+        _, dst = pairs[0]
+        # Subfolder must be based on torrent_name, not series_title
+        assert "Anime.S01.BDRip.1080p" in str(dst)
+        assert "Some Series" not in str(dst)
 
 
 class TestComputeMovieHardlinkPairs:
@@ -354,6 +372,31 @@ class TestComputeMovieHardlinkPairs:
 
         dsts = [str(dst) for _, dst in pairs]
         assert all("Movie - Revenge (2024)" in d for d in dsts)
+
+    def test_multi_file_uses_torrent_name_as_subfolder(self, tmp_path: Path):
+        """Multi-file torrent: torrent_name is used as subfolder when provided."""
+        save_path = tmp_path / "downloads"
+        torrent_dir = save_path / "Movie.2024.BluRay.x264-GROUP"
+        torrent_dir.mkdir(parents=True)
+        src1 = torrent_dir / "movie.mkv"
+        src2 = torrent_dir / "subs.srt"
+        hardlink_base = tmp_path / "hardlinks"
+
+        pairs = MediaHandlerService._compute_movie_hardlink_pairs(
+            files_on_disk=[src1, src2],
+            save_path=save_path,
+            movie_title="The Movie",
+            year=2024,
+            hardlink_base=hardlink_base,
+            total_files=2,
+            torrent_name="Movie.2024.BluRay.x264-GROUP",
+        )
+
+        assert len(pairs) == 2
+        dsts = [str(dst) for _, dst in pairs]
+        # Subfolder must be torrent_name, not "The Movie (2024)"
+        assert all("Movie.2024.BluRay.x264-GROUP" in d for d in dsts)
+        assert all("The Movie" not in d for d in dsts)
 
 
 class TestHardlinkFailureAborts:
