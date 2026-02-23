@@ -458,76 +458,71 @@ class MediaHandlerService:
                 Mutated in place — newly hardlinked subs are added after processing.
         """
         try:
-            async with self._qb_service:
-                torrent = await self._qb_service.get_torrent_by_hash(download_id)
-                if not torrent:
-                    return
+            file_list = await self._qb_service.get_torrent_files(download_id)
+            if not file_list.files:
+                return
 
-                file_list = await self._qb_service.get_torrent_files(download_id)
-                if not file_list.files:
-                    return
+            # Filter subtitle files (returns torrent-relative paths)
+            subtitle_names = self._subtitle_service.filter_subtitle_files(
+                file_list.files
+            )
+            if not subtitle_names:
+                logger.debug("No subtitle files found in torrent")
+                return
 
-                # Filter subtitle files (returns torrent-relative paths)
-                subtitle_names = self._subtitle_service.filter_subtitle_files(
-                    file_list.files
-                )
-                if not subtitle_names:
-                    logger.debug("No subtitle files found in torrent")
-                    return
+            # Only process subs not yet hardlinked
+            new_subs = [s for s in subtitle_names if s not in already_hardlinked_subs]
+            if not new_subs:
+                return
 
-                # Only process subs not yet hardlinked
-                new_subs = [s for s in subtitle_names if s not in already_hardlinked_subs]
-                if not new_subs:
-                    return
+            logger.info(
+                "Found subtitle files",
+                count=len(new_subs),
+            )
 
-                logger.info(
-                    "Found subtitle files",
-                    count=len(new_subs),
-                )
-
-                # Use LLM to match subtitles to video files with normalization
-                # Keys in subtitle_mappings are full torrent-relative paths (e.g. "Group/01.ass")
-                subtitle_mappings: dict[str, str] = {}
-                if video_mappings:
-                    try:
-                        subtitle_mappings = await self._subtitle_service.match_subtitles_to_videos(
-                            subtitle_files=new_subs,
-                            video_mappings=video_mappings,
-                        )
-                    except Exception as e:
-                        logger.warning("Subtitle LLM matching failed, using original names", error=str(e))
-
-                # Build subtitle hardlink pairs using torrent_name subfolder
-                safe_torrent = MediaHandlerService._sanitize_title(torrent_name)
-                subtitle_pairs: list[tuple[Path, Path]] = []
-                successfully_hardlinked: list[str] = []
-
-                for sub_name in new_subs:
-                    src = save_path / sub_name
-                    if src.exists():
-                        # Use LLM mapping (full torrent-relative path as key) or preserve group dir
-                        new_name = subtitle_mappings.get(sub_name, None)
-                        if new_name:
-                            # LLM gave a flat name like "Show.S01E01.rus.SovetRomantica.ass"
-                            dst = hardlink_base / safe_torrent / new_name
-                        else:
-                            # No LLM mapping: preserve group directory for disambiguation.
-                            # e.g. sub_name = "Cqur Far/01.ass" -> dst = hardlinks/{torrent}/Cqur Far/01.ass
-                            # This prevents same-filename collision across subtitle groups.
-                            dst = hardlink_base / safe_torrent / sub_name
-                        subtitle_pairs.append((src, dst))
-                        successfully_hardlinked.append(sub_name)
-
-                if subtitle_pairs and self._hardlink_service:
-                    result = self._hardlink_service.create_hardlinks(subtitle_pairs)
-                    logger.info(
-                        "Subtitle hardlinks created",
-                        created=len(result.created),
-                        skipped=len(result.skipped),
-                        errors=len(result.errors),
+            # Use LLM to match subtitles to video files with normalization
+            # Keys in subtitle_mappings are full torrent-relative paths (e.g. "Group/01.ass")
+            subtitle_mappings: dict[str, str] = {}
+            if video_mappings:
+                try:
+                    subtitle_mappings = await self._subtitle_service.match_subtitles_to_videos(
+                        subtitle_files=new_subs,
+                        video_mappings=video_mappings,
                     )
-                    # Mark successfully attempted subs as done (avoid retrying every poll)
-                    already_hardlinked_subs.update(successfully_hardlinked)
+                except Exception as e:
+                    logger.warning("Subtitle LLM matching failed, using original names", error=str(e))
+
+            # Build subtitle hardlink pairs using torrent_name subfolder
+            safe_torrent = MediaHandlerService._sanitize_title(torrent_name)
+            subtitle_pairs: list[tuple[Path, Path]] = []
+            successfully_hardlinked: list[str] = []
+
+            for sub_name in new_subs:
+                src = save_path / sub_name
+                if src.exists():
+                    # Use LLM mapping (full torrent-relative path as key) or preserve group dir
+                    new_name = subtitle_mappings.get(sub_name, None)
+                    if new_name:
+                        # LLM gave a flat name like "Show.S01E01.rus.SovetRomantica.ass"
+                        dst = hardlink_base / safe_torrent / new_name
+                    else:
+                        # No LLM mapping: preserve group directory for disambiguation.
+                        # e.g. sub_name = "Cqur Far/01.ass" -> dst = hardlinks/{torrent}/Cqur Far/01.ass
+                        # This prevents same-filename collision across subtitle groups.
+                        dst = hardlink_base / safe_torrent / sub_name
+                    subtitle_pairs.append((src, dst))
+                    successfully_hardlinked.append(sub_name)
+
+            if subtitle_pairs and self._hardlink_service:
+                result = self._hardlink_service.create_hardlinks(subtitle_pairs)
+                logger.info(
+                    "Subtitle hardlinks created",
+                    created=len(result.created),
+                    skipped=len(result.skipped),
+                    errors=len(result.errors),
+                )
+                # Mark successfully attempted subs as done (avoid retrying every poll)
+                already_hardlinked_subs.update(successfully_hardlinked)
 
         except Exception as e:
             logger.warning(

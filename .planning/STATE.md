@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 6 of 6 (NAS Deploy and E2E Validation)
-Plan: 2 of 2 in current phase (Tasks 1-7 done, Task 8 awaiting human-verify)
-Status: 06-02 at checkpoint — hardlink pipeline refactored, NAS deployed, awaiting E2E validation
-Last activity: 2026-02-23 — Completed 06-02 tasks 1-7, stopped at Task 8 (E2E human-verify checkpoint)
+Plan: 3 of 3 in current phase (Tasks 1-2 done, Task 3 awaiting human-verify deploy)
+Status: 06-03 at checkpoint — torrent_name subfolder fix and incremental subtitle processing implemented, awaiting NAS deploy and E2E verification
+Last activity: 2026-02-23 — Completed 06-03 tasks 1-2 (Gap 1 + Gap 2 closure), stopped at Task 3 (deploy + E2E human-verify checkpoint)
 
-Progress: [█████████░] 95%
+Progress: [█████████░] 97%
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [█████████░] 95%
 | Phase 05 P02 | 2min | 2 tasks | 3 files |
 | Phase 06 P01 | 5min | 3 tasks | 1 files |
 | Phase 06 P02 | 7min | 7 tasks | 8 files |
+| Phase 06 P03 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 06-02]: Hardlinks go to staging hardlink_path not directly in library -- Sonarr/Radarr import via Remote Path Mapping
 - [Phase 06-02]: TV hardlinks flat in {series}/ with LLM-normalized names; movies preserve torrent-relative structure under {Movie (Year)}/
 - [Phase 06-02]: HardlinkService: single hardlinks_path vs download_path device check (not list of library paths)
+- [Phase 06-03]: Use torrent.name (not series/movie title) as hardlink subfolder for Remote Path Mapping compatibility
+- [Phase 06-03]: Subtitle processing moved inside polling loop with already_hardlinked_subs tracking for incremental creation
+- [Phase 06-03]: Subtitle lookup uses full torrent-relative path key (not bare filename) to prevent group collision
 
 ### Pending Todos
 
@@ -92,5 +96,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: 06-02-PLAN.md Task 8 (checkpoint:human-verify — E2E validation requires triggering real Sonarr/Radarr grab)
+Stopped at: 06-03-PLAN.md Task 3 (checkpoint:human-verify — deploy to NAS and verify E2E import paths with real Sonarr/Radarr grab)
 Resume file: None
