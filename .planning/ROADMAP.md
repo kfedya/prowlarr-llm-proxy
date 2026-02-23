@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: HardlinkService** - Isolated filesystem service creates hardlinks with startup validation and no side effects on torrent files
 - [ ] **Phase 4: Architecture Refactor** - Monolith decomposed into focused services; Sonarr webhook creates hardlinks after metadata, triggers rescan after download
 - [ ] **Phase 5: Radarr Webhook and Movie Hardlinks** - Radarr grab webhook creates hardlinks after metadata, triggers Radarr rescan after download
-- [ ] **Phase 6: NAS Deploy and E2E Validation** - Full stack deployed on NAS with USE_NEW_HANDLER=true, all webhook flows validated end-to-end
+- [x] **Phase 6: NAS Deploy and E2E Validation** - Full stack deployed on NAS with USE_NEW_HANDLER=true, all webhook flows validated end-to-end (completed 2026-02-23)
 
 ## Phase Details
 
@@ -116,7 +116,7 @@ Plans:
   5. Radarr Test webhook returns 200 OK without triggering processing
   6. TV subtitle files appear with `.eng.srt` / `.rus.srt` language suffix naming
   7. Legacy `USE_NEW_HANDLER=false` path still works for Sonarr (fallback verified)
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 06-01-PLAN.md -- Deploy container with volume mounts, .env config, infrastructure verification (2026-02-23)
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. HardlinkService | 1/1 | Complete | 2026-02-23 |
 | 4. Architecture Refactor | 2/2 | Complete | 2026-02-23 |
 | 5. Radarr Webhook and Movie Hardlinks | 2/2 | Complete | 2026-02-23 |
-| 6. NAS Deploy and E2E Validation | 1/2 | In progress | - |
+| 6. NAS Deploy and E2E Validation | 2/2 | Complete   | 2026-02-23 |
