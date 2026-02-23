@@ -53,44 +53,42 @@ class HardlinkResult:
 
 
 class HardlinkService:
-    """Creates hardlinks from download directory to library directories.
+    """Creates hardlinks from download directory to hardlinks staging directory.
 
     The service receives pre-computed (src, dst) path pairs and creates
     hardlinks. File naming/renaming is handled upstream by the LLM service.
 
     Args:
         download_path: Root download directory.
-        library_paths: Library directories that must be on the same device.
+        hardlinks_path: Hardlink staging directory (must be on same device as download_path).
         dry_run: If True, report what would happen without creating links.
 
     Raises:
-        CrossDeviceError: If any library path is on a different block device
+        CrossDeviceError: If hardlinks_path is on a different block device
             than the download path.
     """
 
     def __init__(
         self,
         download_path: Path,
-        library_paths: list[Path],
+        hardlinks_path: Path,
         dry_run: bool = False,
     ) -> None:
         self.download_path = download_path
-        self.library_paths = library_paths
+        self.hardlinks_path = hardlinks_path
         self.dry_run = dry_run
 
         self._validate_same_device()
 
     def _validate_same_device(self) -> None:
-        """Validate all paths are on the same block device."""
+        """Validate download_path and hardlinks_path are on the same block device."""
         dl_dev = self.download_path.stat().st_dev
-        for lib_path in self.library_paths:
-            lib_dev = lib_path.stat().st_dev
-            if dl_dev != lib_dev:
-                raise CrossDeviceError(
-                    f"Download path {self.download_path} (dev={dl_dev}) and "
-                    f"library path {lib_path} (dev={lib_dev}) are on different devices. "
-                    f"Hardlinks require the same filesystem."
-                )
+        hl_dev = self.hardlinks_path.stat().st_dev
+        if dl_dev != hl_dev:
+            raise CrossDeviceError(
+                f"Download path {self.download_path} (dev={dl_dev}) and "
+                f"hardlinks path {self.hardlinks_path} (dev={hl_dev}) are on different devices."
+            )
 
     @staticmethod
     def _should_hardlink(src: Path) -> bool:
