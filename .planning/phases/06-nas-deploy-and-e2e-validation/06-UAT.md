@@ -3,7 +3,7 @@ status: complete
 phase: 06-nas-deploy-and-e2e-validation
 source: 06-01-SUMMARY.md, 06-02-SUMMARY.md
 started: 2026-02-23T12:30:00Z
-updated: 2026-02-23T20:00:00Z
+updated: 2026-02-23T20:30:00Z
 ---
 
 ## Current Test
@@ -65,9 +65,22 @@ skipped: 0
   reason: "User reported: No subtitle hardlinks for Kaguya (Beatrice-Raws BDRip with Cqur Far/SovetRomantica/Wakanim subtitle groups). Two bugs: (1) _process_subtitles only runs after full torrent completion — at 69.5% progress videos are hardlinked but subtitles pending; (2) multiple subtitle groups with identical filenames (all 3 groups have same .ass filenames) collide at destination — only last one written."
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Two defects: (1) _process_subtitles is called after the polling loop exits (media_handler.py line 244), so it only runs when torrent reaches COMPLETED_STATES — never incrementally. (2) Path(sub_name).name strips the group folder prefix collapsing all groups to the same bare filename; plus subtitle_mappings.get(sub_basename) uses bare filename as key but the dict is keyed by full torrent-relative paths — LLM-assigned unique names are silently discarded and all groups collide at the same dst."
+  artifacts:
+    - path: "app/services/media_handler.py"
+      issue: "Lines 244-252: _process_subtitles called after polling loop — never runs until torrent 100% complete"
+    - path: "app/services/media_handler.py"
+      issue: "Line 473: Path(sub_name).name strips group folder, collapsing all subtitle groups to same basename"
+    - path: "app/services/media_handler.py"
+      issue: "Line 474: subtitle_mappings.get(sub_basename, ...) uses bare filename as key but dict is keyed by full torrent-relative paths — LLM output always discarded"
+    - path: "app/services/llm.py"
+      issue: "Line 628: mappings[sub_file] stores full path as key — mismatched with lookup side"
+    - path: "app/services/hardlink.py"
+      issue: "Lines 138-140: FileExistsError silently skipped, collision not surfaced as warning"
+  missing:
+    - "Move subtitle processing inside the incremental polling loop (parallel to _handle_tv_grab video logic)"
+    - "Preserve group identity: use full sub_name (not .name) to derive destination path, incorporating parent directory as disambiguator"
+    - "Fix LLM output lookup: change subtitle_mappings.get(sub_basename, ...) to subtitle_mappings.get(sub_name, sub_basename) to use full path key"
   debug_session: ""
 
 - truth: "Hardlinks are created with correct folder/file names that Sonarr/Radarr can match for import"
@@ -75,7 +88,17 @@ skipped: 0
   reason: "User reported: Sonarr says 'No files found are eligible for import in /data/downloads/hardlinks/Cowboy Bebop TV BDRip 1080p [3df_voice]'. Sonarr/Radarr gets the series/movie title from the torrent downloader — we need to keep the original torrent folder name (and file names for single-file torrents) unchanged instead of LLM-renaming them."
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Sonarr's auto-import asks qBittorrent for content_path (original torrent folder name e.g. 'Cowboy Bebop TV BDRip 1080p [3df_voice]'), applies Remote Path Mapping, and looks for that exact folder under hardlinks/. But the proxy creates hardlinks under hardlinks/{sanitized-series-title}/ (e.g. hardlinks/Cowboy Bebop/) — different path. Fix: name the hardlink subfolder after torrent.name (original torrent name) not the Sonarr series title. LLM-renamed individual video filenames inside the folder are correct and must be preserved."
+  artifacts:
+    - path: "app/services/media_handler.py"
+      issue: "Lines 360-365 (_compute_tv_hardlink_pairs): uses safe_series = _sanitize_title(series_title) as subfolder; should use sanitized torrent_name instead"
+    - path: "app/services/media_handler.py"
+      issue: "Lines 368-398 (_compute_movie_hardlink_pairs): uses f'{safe_title} ({year})' as subfolder; should use sanitized torrent_name"
+    - path: "app/services/media_handler.py"
+      issue: "torrent.name available at line 151 but never passed to _handle_tv_grab or _handle_movie_grab"
+  missing:
+    - "Add torrent_name parameter to _handle_tv_grab, _handle_movie_grab, _compute_tv_hardlink_pairs, _compute_movie_hardlink_pairs"
+    - "Pass torrent.name from polling loop call sites to the handlers"
+    - "Replace series_title/movie_title-based subfolder with sanitized torrent_name in both compute functions"
+    - "Update _process_subtitles destination to use same torrent_name-derived folder"
   debug_session: ""
