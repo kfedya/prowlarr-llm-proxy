@@ -346,3 +346,209 @@ class TestHardlinkFailureAborts:
         # Since handle_grab_event returned after hardlink error,
         # the subtitle processing qb calls didn't happen
         assert initial_call_count >= 1  # at least polling calls
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 tests: library-path routing, movie behavior, sanitization
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeTitle:
+    """Filesystem-unsafe character sanitization."""
+
+    def test_colons_replaced(self):
+        assert MediaHandlerService._sanitize_title("Title: Subtitle") == "Title - Subtitle"
+
+    def test_slashes_replaced(self):
+        assert MediaHandlerService._sanitize_title("A/B\\C") == "A-B-C"
+
+    def test_star_question_removed(self):
+        assert MediaHandlerService._sanitize_title("What?! *Really*") == "What! Really"
+
+    def test_angle_brackets_removed(self):
+        assert MediaHandlerService._sanitize_title("Title <Special>") == "Title Special"
+
+    def test_pipe_and_quotes_removed(self):
+        assert MediaHandlerService._sanitize_title('Title |"quoted"') == "Title quoted"
+
+    def test_trailing_dots_stripped(self):
+        assert MediaHandlerService._sanitize_title("Title...") == "Title"
+
+    def test_trailing_spaces_stripped(self):
+        assert MediaHandlerService._sanitize_title("Title   ") == "Title"
+
+    def test_combined_unsafe_chars(self):
+        result = MediaHandlerService._sanitize_title('Movie: Part 2 *Extended* "Cut"...')
+        assert result == "Movie - Part 2 Extended Cut"
+
+
+class TestMakeSubfolderUnsafeChars:
+    """Subfolder name with filesystem-unsafe characters in title."""
+
+    def test_tv_with_colon(self):
+        name = MediaHandlerService._make_subfolder_name(
+            media_type=MediaType.TV,
+            title="Show: The Return",
+            season_number=1,
+            episode_numbers=[1],
+        )
+        assert name == "Show - The Return/Season 01"
+
+    def test_movie_with_colon_and_year(self):
+        name = MediaHandlerService._make_subfolder_name(
+            media_type=MediaType.MOVIE,
+            title="Movie: Revenge",
+            season_number=None,
+            episode_numbers=None,
+            year=2024,
+        )
+        assert name == "Movie - Revenge (2024)"
+
+
+class TestMovieBehavior:
+    """Movie-specific behavior: skip subs, no extension filter."""
+
+    @pytest.mark.asyncio
+    @patch("app.services.media_handler.asyncio.sleep", new_callable=AsyncMock)
+    async def test_movie_skips_subtitle_processing(self, mock_sleep, tmp_path: Path):
+        """handle_grab_event with MOVIE skips _process_subtitles."""
+        dl_dir = tmp_path / "torrents" / "Test.Torrent"
+        dl_dir.mkdir(parents=True)
+        (dl_dir / "movie.mkv").write_bytes(b"data")
+
+        torrent = _make_torrent(save_path=str(tmp_path / "torrents"))
+        file_list = _make_file_list(["Test.Torrent/movie.mkv"])
+
+        svc, mocks = _make_service(
+            tmp_path,
+            mapping_return=_make_mapping(),
+            torrent_return=torrent,
+            file_list_return=file_list,
+        )
+
+        await svc.handle_grab_event(
+            release_title="Movie.Release",
+            download_id="abc123",
+            media_type=MediaType.MOVIE,
+            movie_title="Cool Movie",
+            year=2024,
+        )
+
+        # Hardlinks called
+        mocks["hardlink"].create_hardlinks.assert_called_once()
+        # filter_extensions=False for movies
+        call_kwargs = mocks["hardlink"].create_hardlinks.call_args
+        assert call_kwargs[1].get("filter_extensions") is False or (
+            len(call_kwargs[0]) > 1 and call_kwargs[0][1] is False
+        )
+        # Subtitle filter should NOT be called (no _process_subtitles for movies)
+        mocks["subtitle"].filter_subtitle_files.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.services.media_handler.asyncio.sleep", new_callable=AsyncMock)
+    async def test_movie_passes_filter_extensions_false(self, mock_sleep, tmp_path: Path):
+        """MOVIE passes filter_extensions=False to create_hardlinks."""
+        dl_dir = tmp_path / "torrents" / "Test.Torrent"
+        dl_dir.mkdir(parents=True)
+        (dl_dir / "movie.mkv").write_bytes(b"data")
+
+        torrent = _make_torrent(save_path=str(tmp_path / "torrents"))
+        file_list = _make_file_list(["Test.Torrent/movie.mkv"])
+
+        svc, mocks = _make_service(
+            tmp_path,
+            mapping_return=_make_mapping(),
+            torrent_return=torrent,
+            file_list_return=file_list,
+        )
+
+        await svc.handle_grab_event(
+            release_title="Movie.Release",
+            download_id="abc123",
+            media_type=MediaType.MOVIE,
+            movie_title="Cool Movie",
+            year=2024,
+        )
+
+        mocks["hardlink"].create_hardlinks.assert_called_once()
+        _, kwargs = mocks["hardlink"].create_hardlinks.call_args
+        assert kwargs["filter_extensions"] is False
+
+    @pytest.mark.asyncio
+    async def test_aborts_when_library_path_none(self, tmp_path: Path):
+        """handle_grab_event aborts when library path is None for the media type."""
+        mock_mapping = AsyncMock()
+        mock_qb = AsyncMock()
+        mock_hardlink = MagicMock()
+        mock_subtitle = MagicMock()
+
+        # Create service with NO radarr_library_path
+        svc = MediaHandlerService(
+            torrent_mapping_service=mock_mapping,
+            qbittorrent_service=mock_qb,
+            hardlink_service=mock_hardlink,
+            subtitle_service=mock_subtitle,
+            download_path=tmp_path,
+            sonarr_library_path=tmp_path / "tv",
+            radarr_library_path=None,
+        )
+
+        await svc.handle_grab_event(
+            release_title="Movie.Release",
+            download_id="abc123",
+            media_type=MediaType.MOVIE,
+            movie_title="Cool Movie",
+            year=2024,
+        )
+
+        # Should abort before even looking up mapping
+        mock_mapping.get_by_title.assert_not_called()
+        mock_hardlink.create_hardlinks.assert_not_called()
+
+
+class TestHardlinkFilterExtensions:
+    """HardlinkService create_hardlinks with filter_extensions=False."""
+
+    def test_filter_false_processes_all_files(self, tmp_path: Path):
+        """With filter_extensions=False, .nfo, .txt, .jpg all get hardlinked."""
+        dl = tmp_path / "downloads"
+        lib = tmp_path / "library"
+        dl.mkdir()
+        lib.mkdir()
+
+        from app.services.hardlink import HardlinkService
+
+        pairs = []
+        for name in ["movie.mkv", "info.nfo", "readme.txt", "cover.jpg"]:
+            src = dl / name
+            src.write_text("content")
+            dst = lib / name
+            pairs.append((src, dst))
+
+        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        result = svc.create_hardlinks(pairs, filter_extensions=False)
+
+        assert len(result.created) == 4
+        assert len(result.skipped) == 0
+
+    def test_filter_true_skips_non_media(self, tmp_path: Path):
+        """With filter_extensions=True (default), .nfo etc are skipped."""
+        dl = tmp_path / "downloads"
+        lib = tmp_path / "library"
+        dl.mkdir()
+        lib.mkdir()
+
+        from app.services.hardlink import HardlinkService
+
+        pairs = []
+        for name in ["movie.mkv", "info.nfo", "readme.txt"]:
+            src = dl / name
+            src.write_text("content")
+            dst = lib / name
+            pairs.append((src, dst))
+
+        svc = HardlinkService(download_path=dl, library_paths=[lib])
+        result = svc.create_hardlinks(pairs, filter_extensions=True)
+
+        assert len(result.created) == 1  # only .mkv
+        assert len(result.skipped) == 2  # .nfo and .txt
