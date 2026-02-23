@@ -271,7 +271,7 @@ class TestComputeMovieHardlinkPairs:
     """Movie hardlink pair computation — preserve torrent-relative structure."""
 
     def test_single_file_torrent(self, tmp_path: Path):
-        """Single file at save_path root."""
+        """Single file: hardlink directly in hardlink_base, no wrapper folder."""
         save_path = tmp_path / "downloads"
         save_path.mkdir()
         src = save_path / "Movie.2024.mkv"
@@ -287,7 +287,7 @@ class TestComputeMovieHardlinkPairs:
 
         assert len(pairs) == 1
         _, dst = pairs[0]
-        assert dst == hardlink_base / "Cool Movie (2024)" / "Movie.2024.mkv"
+        assert dst == hardlink_base / "Movie.2024.mkv"
 
     def test_multi_file_torrent_preserves_structure(self, tmp_path: Path):
         """Multi-file torrent preserves relative path under movie folder."""
@@ -314,7 +314,7 @@ class TestComputeMovieHardlinkPairs:
         assert hardlink_base / "Movie (2024)" / "Movie.2024.BluRay" / "extras" / "making-of.mkv" in dsts
 
     def test_no_year(self, tmp_path: Path):
-        """Without year, folder is just the title."""
+        """Single file without year: still placed flat in hardlink_base."""
         save_path = tmp_path / "downloads"
         save_path.mkdir()
         src = save_path / "Movie.mkv"
@@ -329,25 +329,27 @@ class TestComputeMovieHardlinkPairs:
         )
 
         _, dst = pairs[0]
-        assert dst.parts[-2] == "Cool Movie"
+        assert dst == hardlink_base / "Movie.mkv"
 
-    def test_sanitizes_movie_title(self, tmp_path: Path):
-        """Movie titles with unsafe chars are sanitized."""
+    def test_sanitizes_movie_title_multi_file(self, tmp_path: Path):
+        """Multi-file: movie titles with unsafe chars are sanitized in folder name."""
         save_path = tmp_path / "downloads"
-        save_path.mkdir()
-        src = save_path / "movie.mkv"
+        torrent_dir = save_path / "Movie.Revenge.2024"
+        torrent_dir.mkdir(parents=True)
+        src1 = torrent_dir / "movie.mkv"
+        src2 = torrent_dir / "extras.mkv"
         hardlink_base = tmp_path / "hardlinks"
 
         pairs = MediaHandlerService._compute_movie_hardlink_pairs(
-            files_on_disk=[src],
+            files_on_disk=[src1, src2],
             save_path=save_path,
             movie_title="Movie: Revenge",
             year=2024,
             hardlink_base=hardlink_base,
         )
 
-        _, dst = pairs[0]
-        assert "Movie - Revenge (2024)" in str(dst)
+        dsts = [str(dst) for _, dst in pairs]
+        assert all("Movie - Revenge (2024)" in d for d in dsts)
 
 
 class TestHardlinkFailureAborts:

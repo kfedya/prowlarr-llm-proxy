@@ -372,8 +372,14 @@ class MediaHandlerService:
     ) -> list[tuple[Path, Path]]:
         """Compute (src, dst) hardlink pairs for movie files.
 
-        Preserves torrent-relative path structure under hardlink_base/{Movie (Year)}/.
+        Single file: hardlink_base/{filename} (no wrapper folder).
+        Multi-file: hardlink_base/{Movie (Year)}/{torrent-relative path}.
         """
+        if len(files_on_disk) == 1:
+            src = files_on_disk[0]
+            dst = hardlink_base / src.name
+            return [(src, dst)]
+
         safe_title = MediaHandlerService._sanitize_title(movie_title)
         folder = f"{safe_title} ({year})" if year else safe_title
 
