@@ -104,11 +104,17 @@ class HardlinkService:
         """
         return src.suffix.lower() in ALLOWED_EXTENSIONS
 
-    def create_hardlinks(self, file_pairs: list[tuple[Path, Path]]) -> HardlinkResult:
+    def create_hardlinks(
+        self,
+        file_pairs: list[tuple[Path, Path]],
+        filter_extensions: bool = True,
+    ) -> HardlinkResult:
         """Create hardlinks for a batch of (src, dst) file pairs.
 
         Args:
             file_pairs: List of (source, destination) path tuples.
+            filter_extensions: If True (default), skip files not in ALLOWED_EXTENSIONS.
+                Set to False for movies to hardlink ALL files regardless of extension.
 
         Returns:
             HardlinkResult with created, skipped, and errors lists.
@@ -116,7 +122,7 @@ class HardlinkService:
         result = HardlinkResult()
 
         for src, dst in file_pairs:
-            if not self._should_hardlink(src):
+            if filter_extensions and not self._should_hardlink(src):
                 logger.debug("skipped non-media file", src=str(src), ext=src.suffix)
                 result.skipped.append((src, dst))
                 continue

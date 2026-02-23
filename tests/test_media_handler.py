@@ -80,7 +80,8 @@ def _make_service(
         hardlink_service=mock_hardlink,
         subtitle_service=mock_subtitle,
         download_path=tmp_path,
-        hardlink_base=tmp_path / "hardlinks",
+        sonarr_library_path=tmp_path / "tv",
+        radarr_library_path=tmp_path / "movies",
     )
 
     mocks = {
@@ -153,8 +154,8 @@ class TestHandleGrabEventHappyPath:
         assert len(call_args) == 1
         src, dst = call_args[0]
         assert src == dl_dir / "episode.mkv"
-        assert "hardlinks" in str(dst)
-        assert "Test Show - S01E05" in str(dst)
+        assert "tv" in str(dst)
+        assert "Test Show/Season 01" in str(dst)
 
         # No qBit rename methods should be called
         mocks["qb"].rename_file.assert_not_called()
@@ -195,7 +196,7 @@ class TestPollTimeout:
 
 
 class TestMakeSubfolderNameTV:
-    """TV subfolder naming."""
+    """TV subfolder naming -- nested '{Title}/Season {NN}' format."""
 
     def test_single_episode(self):
         name = MediaHandlerService._make_subfolder_name(
@@ -204,7 +205,7 @@ class TestMakeSubfolderNameTV:
             season_number=2,
             episode_numbers=[3],
         )
-        assert name == "My Show - S02E03"
+        assert name == "My Show/Season 02"
 
     def test_multi_episode(self):
         name = MediaHandlerService._make_subfolder_name(
@@ -213,7 +214,7 @@ class TestMakeSubfolderNameTV:
             season_number=1,
             episode_numbers=[1, 2, 3, 12],
         )
-        assert name == "My Show - S01E01-E12"
+        assert name == "My Show/Season 01"
 
     def test_season_pack(self):
         name = MediaHandlerService._make_subfolder_name(
@@ -222,7 +223,7 @@ class TestMakeSubfolderNameTV:
             season_number=3,
             episode_numbers=None,
         )
-        assert name == "My Show - S03"
+        assert name == "My Show/Season 03"
 
     def test_no_season(self):
         name = MediaHandlerService._make_subfolder_name(
@@ -233,16 +234,15 @@ class TestMakeSubfolderNameTV:
         )
         assert name == "My Show"
 
-    def test_sanitizes_slashes(self):
+    def test_sanitizes_slashes_in_title(self):
         name = MediaHandlerService._make_subfolder_name(
             media_type=MediaType.TV,
             title="Title/With\\Slashes",
             season_number=1,
             episode_numbers=[1],
         )
-        assert "/" not in name
-        assert "\\" not in name
-        assert "Title-With-Slashes - S01E01" == name
+        # The title portion should have slashes replaced; the nested separator / is allowed
+        assert name == "Title-With-Slashes/Season 01"
 
 
 class TestMakeSubfolderNameMovie:

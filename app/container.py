@@ -19,11 +19,24 @@ def _create_hardlink_service(settings: Settings) -> HardlinkService | None:
     """Create HardlinkService only if new handler is enabled and paths exist."""
     if not settings.use_new_handler:
         return None
-    hardlink_base = settings.hardlink_path or (settings.download_path / "hardlinks")
+
+    # Build library_paths from configured library paths
+    library_paths: list[Path] = []
+    if settings.sonarr_library_path is not None:
+        library_paths.append(settings.sonarr_library_path)
+    if settings.radarr_library_path is not None:
+        library_paths.append(settings.radarr_library_path)
+
+    # Fallback to hardlink_base for backward compatibility
+    if not library_paths:
+        from pathlib import Path as _P
+        hardlink_base = settings.hardlink_path or (settings.download_path / "hardlinks")
+        library_paths = [hardlink_base]
+
     try:
         return HardlinkService(
             download_path=settings.download_path,
-            library_paths=[hardlink_base],
+            library_paths=library_paths,
         )
     except Exception as e:
         _logger.warning(
@@ -122,7 +135,8 @@ class Container(containers.DeclarativeContainer):
         subtitle_service=subtitle_service,
         llm_service=llm_service,
         download_path=config.provided.download_path,
-        hardlink_base=config.provided.hardlink_path,
+        sonarr_library_path=config.provided.sonarr_library_path,
+        radarr_library_path=config.provided.radarr_library_path,
     )
 
 

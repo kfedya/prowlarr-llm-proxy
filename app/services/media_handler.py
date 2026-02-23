@@ -53,7 +53,8 @@ class MediaHandlerService:
         subtitle_service: SubtitleService,
         llm_service: LLMService | None = None,
         download_path: Path = Path("/downloads"),
-        hardlink_base: Path | None = None,
+        sonarr_library_path: Path | None = None,
+        radarr_library_path: Path | None = None,
     ) -> None:
         self._mapping_service = torrent_mapping_service
         self._qb_service = qbittorrent_service
@@ -61,12 +62,14 @@ class MediaHandlerService:
         self._subtitle_service = subtitle_service
         self._llm_service = llm_service
         self._download_path = download_path
-        self._hardlink_base = hardlink_base or (download_path / "hardlinks")
+        self._sonarr_library_path = sonarr_library_path
+        self._radarr_library_path = radarr_library_path
 
         logger.info(
             "MediaHandlerService initialized",
             download_path=str(download_path),
-            hardlink_base=str(self._hardlink_base),
+            sonarr_library_path=str(sonarr_library_path),
+            radarr_library_path=str(radarr_library_path),
             hardlink_service_available=hardlink_service is not None,
         )
 
@@ -87,12 +90,26 @@ class MediaHandlerService:
         """
         title_label = series_title or movie_title or release_title[:60]
         try:
+            # Select library path by media type
+            if media_type == MediaType.TV:
+                library_base = self._sonarr_library_path
+            else:
+                library_base = self._radarr_library_path
+
+            if library_base is None:
+                logger.error(
+                    "No library path configured for media type",
+                    media_type=media_type.value,
+                )
+                return
+
             logger.info(
                 "Processing grab event",
                 release_title=release_title[:80],
                 download_id=download_id,
                 media_type=media_type.value,
                 title=title_label,
+                library_base=str(library_base),
             )
 
             # Step 1: Look up torrent mapping
@@ -137,7 +154,7 @@ class MediaHandlerService:
             )
             pairs = self._compute_hardlink_pairs(
                 files=files_on_disk,
-                hardlink_base=self._hardlink_base,
+                hardlink_base=library_base,
                 subfolder_name=subfolder,
             )
 
@@ -152,7 +169,11 @@ class MediaHandlerService:
                 logger.error("HardlinkService not available, cannot create hardlinks")
                 return
 
-            result = self._hardlink_service.create_hardlinks(pairs)
+            # Movies hardlink ALL files (no extension filter, no subtitle processing)
+            use_filter = media_type == MediaType.TV
+            result = self._hardlink_service.create_hardlinks(
+                pairs, filter_extensions=use_filter
+            )
             if result.errors:
                 logger.error(
                     "Hardlink creation failed, aborting",
@@ -169,11 +190,13 @@ class MediaHandlerService:
                 skipped=len(result.skipped),
             )
 
-            # Step 5: Process subtitles
-            await self._process_subtitles(
-                download_id=download_id,
-                subfolder=subfolder,
-            )
+            # Step 5: Process subtitles (TV only -- movies hardlink all files as-is)
+            if media_type == MediaType.TV:
+                await self._process_subtitles(
+                    download_id=download_id,
+                    subfolder=subfolder,
+                    library_base=library_base,
+                )
 
             # Rescan deferred per user decision -- hardlinks fill in-place.
             logger.info(
@@ -331,6 +354,19 @@ class MediaHandlerService:
         return pairs
 
     @staticmethod
+    def _sanitize_title(title: str) -> str:
+        """Sanitize a title for use as a filesystem path component.
+
+        Replaces colons with ' -', slashes with '-', removes *?<>|",
+        strips trailing dots and spaces.
+        """
+        safe = title.replace(":", " -")
+        safe = re.sub(r"[/\\]", "-", safe)
+        safe = re.sub(r'[*?<>|"]', "", safe)
+        safe = safe.rstrip(". ")
+        return safe
+
+    @staticmethod
     def _make_subfolder_name(
         media_type: MediaType,
         title: str,
@@ -338,27 +374,17 @@ class MediaHandlerService:
         episode_numbers: list[int] | None,
         year: int | None = None,
     ) -> str:
-        """Build a sanitized subfolder name for hardlink destinations.
+        """Build a sanitized subfolder path for hardlink destinations.
 
-        TV: "Title - S01E05" or "Title - S01E01-E12" or "Title - S01"
-        Movie: "Title (Year)" or just "Title"
+        TV: "{Title}/Season {NN}" (nested path for Sonarr library structure)
+        Movie: "{Title} ({Year})" or just "{Title}"
         """
-        # Sanitize slashes
-        safe_title = re.sub(r"[/\\]", "-", title)
+        safe_title = MediaHandlerService._sanitize_title(title)
 
         if media_type == MediaType.TV:
             if season_number is None:
                 return safe_title
-            season_str = f"S{season_number:02d}"
-            if episode_numbers and len(episode_numbers) == 1:
-                return f"{safe_title} - {season_str}E{episode_numbers[0]:02d}"
-            elif episode_numbers and len(episode_numbers) > 1:
-                sorted_eps = sorted(episode_numbers)
-                ep_range = f"E{sorted_eps[0]:02d}-E{sorted_eps[-1]:02d}"
-                return f"{safe_title} - {season_str}{ep_range}"
-            else:
-                # Season pack
-                return f"{safe_title} - {season_str}"
+            return f"{safe_title}/Season {season_number:02d}"
         else:
             # Movie
             if year:
@@ -369,8 +395,17 @@ class MediaHandlerService:
         self,
         download_id: str,
         subfolder: str,
+        library_base: Path,
     ) -> None:
-        """Find subtitle files in the torrent and create hardlinks for them."""
+        """Find subtitle files in the torrent and create hardlinks for them.
+
+        Only called for TV media type. Movies hardlink all files as-is.
+
+        Args:
+            download_id: Torrent hash / download ID.
+            subfolder: Subfolder path relative to library base.
+            library_base: Library root path (e.g. sonarr_library_path).
+        """
         try:
             async with self._qb_service:
                 torrent = await self._qb_service.get_torrent_by_hash(download_id)
@@ -402,7 +437,7 @@ class MediaHandlerService:
                 for sub_name in subtitle_names:
                     src = save_path / sub_name
                     if src.exists():
-                        dst = self._hardlink_base / subfolder / Path(sub_name).name
+                        dst = library_base / subfolder / Path(sub_name).name
                         subtitle_pairs.append((src, dst))
 
                 if subtitle_pairs and self._hardlink_service:
