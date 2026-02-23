@@ -116,7 +116,11 @@ Plans:
   5. Radarr Test webhook returns 200 OK without triggering processing
   6. TV subtitle files appear with `.eng.srt` / `.rus.srt` language suffix naming
   7. Legacy `USE_NEW_HANDLER=false` path still works for Sonarr (fallback verified)
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md -- Deploy container with volume mounts, .env config, infrastructure verification
+- [ ] 06-02-PLAN.md -- E2E validation: Sonarr/Radarr grabs, hardlink inode checks, subtitle test, cleanup
 
 ## Progress
 
