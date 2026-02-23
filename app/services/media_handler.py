@@ -32,12 +32,17 @@ logger = structlog.get_logger(__name__)
 VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mkv", ".mp4", ".avi", ".wmv", ".flv", ".mov"})
 
 # Polling constants
-FAST_INTERVAL = 2.0  # seconds between polls during fast phase
-SLOW_INTERVAL = 10.0  # seconds between polls during slow phase
-FAST_CUTOFF = 30.0  # switch from fast to slow after this many seconds
-MAX_TIMEOUT = 600.0  # max total polling time per attempt (10 min)
-RETRY_DELAY = 300.0  # delay before retry attempt (5 min)
-MAX_ATTEMPTS = 2  # total polling attempts
+FAST_INTERVAL = 2.0   # seconds between polls: 0–30s
+SLOW_INTERVAL = 10.0  # seconds between polls: 30s–10min
+VERY_SLOW_INTERVAL = 60.0  # seconds between polls: 10min+
+FAST_CUTOFF = 30.0    # switch fast→slow after this many seconds
+SLOW_CUTOFF = 600.0   # switch slow→very_slow after this many seconds
+MAX_TIMEOUT = 259200.0  # max total polling time: 3 days
+
+# qBittorrent states that indicate download is fully complete (all files on disk)
+COMPLETED_STATES: frozenset[str] = frozenset({
+    "uploading", "stalledUP", "checkingUP", "pausedUP", "queuedUP", "forcedUP",
+})
 
 
 class MediaHandlerService:
@@ -90,12 +95,16 @@ class MediaHandlerService:
     ) -> None:
         """Handle a grab event from Sonarr or Radarr webhook.
 
-        Orchestrates: mapping lookup -> poll qBit -> hardlink -> subtitles.
+        Creates hardlinks incrementally as torrent files appear on disk.
+        Continues polling until torrent is complete (all files hardlinked) or timeout.
         """
         title_label = series_title or movie_title or release_title[:60]
         try:
             if self._hardlink_path is None:
                 logger.error("No hardlink_path configured, cannot create hardlinks")
+                return
+            if not self._hardlink_service:
+                logger.error("HardlinkService not available, cannot create hardlinks")
                 return
 
             hardlink_base = self._hardlink_path
@@ -119,49 +128,125 @@ class MediaHandlerService:
                 )
                 return
 
-            logger.info(
-                "Found torrent mapping",
-                original_title=mapping.original_title[:80],
-            )
+            logger.info("Found torrent mapping", original_title=mapping.original_title[:80])
 
-            # Step 2: Poll for torrent files on disk (returns save_path + files)
-            save_path, files_on_disk = await self._poll_for_files_on_disk(
-                download_id, mapping.original_title
-            )
-            if not files_on_disk or save_path is None:
+            resolved_series = series_title or mapping.series_name or "Unknown"
+            resolved_movie = movie_title or "Unknown"
+
+            # Step 2: Incremental polling loop — hardlink files as they appear on disk
+            hardlinked: set[Path] = set()
+            all_video_mappings: dict[str, str] = {}  # accumulated for subtitle processing
+            save_path: Path | None = None
+            elapsed = 0.0
+
+            while elapsed < MAX_TIMEOUT:
+                interval = (
+                    FAST_INTERVAL if elapsed < FAST_CUTOFF
+                    else SLOW_INTERVAL if elapsed < SLOW_CUTOFF
+                    else VERY_SLOW_INTERVAL
+                )
+
+                try:
+                    async with self._qb_service:
+                        torrent = await self._qb_service.get_torrent_by_hash(download_id)
+                        if not torrent:
+                            logger.debug("Torrent not found yet", elapsed=elapsed)
+                            await asyncio.sleep(interval)
+                            elapsed += interval
+                            continue
+
+                        if torrent.state == "metaDL":
+                            logger.debug("Torrent downloading metadata", elapsed=elapsed)
+                            await asyncio.sleep(interval)
+                            elapsed += interval
+                            continue
+
+                        save_path = Path(torrent.save_path)
+                        torrent_done = torrent.state in COMPLETED_STATES
+
+                        file_list = await self._qb_service.get_torrent_files(download_id)
+                        if not file_list.files:
+                            await asyncio.sleep(interval)
+                            elapsed += interval
+                            continue
+
+                        total_expected = len(file_list.files)
+
+                        # Find files on disk that haven't been hardlinked yet
+                        new_files = [
+                            save_path / f.name
+                            for f in file_list.files
+                            if (save_path / f.name).exists()
+                            and (save_path / f.name) not in hardlinked
+                        ]
+
+                        if new_files:
+                            logger.info(
+                                "New files on disk",
+                                new=len(new_files),
+                                total_done=len(hardlinked) + len(new_files),
+                                total_expected=total_expected,
+                                elapsed=elapsed,
+                            )
+                            if media_type == MediaType.TV:
+                                batch_mappings = await self._handle_tv_grab(
+                                    files_on_disk=new_files,
+                                    save_path=save_path,
+                                    series_title=resolved_series,
+                                    season_number=season_number,
+                                    episode_numbers=episode_numbers,
+                                    hardlink_base=hardlink_base,
+                                    download_id=download_id,
+                                )
+                                all_video_mappings.update(batch_mappings)
+                            else:
+                                await self._handle_movie_grab(
+                                    files_on_disk=new_files,
+                                    save_path=save_path,
+                                    movie_title=resolved_movie,
+                                    year=year,
+                                    hardlink_base=hardlink_base,
+                                )
+                            hardlinked.update(new_files)
+
+                        if torrent_done and len(hardlinked) >= total_expected:
+                            logger.info(
+                                "All files hardlinked, torrent complete",
+                                total=len(hardlinked),
+                                title=title_label,
+                            )
+                            break
+
+                        if torrent_done and not new_files:
+                            # Torrent done but no new files this poll — check again once more
+                            logger.info(
+                                "Torrent complete",
+                                hardlinked=len(hardlinked),
+                                expected=total_expected,
+                            )
+                            break
+
+                except Exception as e:
+                    logger.warning("qBittorrent poll error", error=str(e), elapsed=elapsed)
+
+                await asyncio.sleep(interval)
+                elapsed += interval
+
+            if not hardlinked:
                 logger.error(
-                    "Polling timed out, no files found on disk",
+                    "Polling timed out, no files hardlinked",
                     download_id=download_id,
-                    original_title=mapping.original_title[:80],
+                    elapsed=elapsed,
                 )
                 return
 
-            logger.info(
-                "Files found on disk",
-                file_count=len(files_on_disk),
-            )
-
-            if not self._hardlink_service:
-                logger.error("HardlinkService not available, cannot create hardlinks")
-                return
-
-            # Step 3: Split into TV or movie flow
-            if media_type == MediaType.TV:
-                await self._handle_tv_grab(
-                    files_on_disk=files_on_disk,
-                    save_path=save_path,
-                    series_title=series_title or mapping.series_name or "Unknown",
-                    season_number=season_number,
-                    episode_numbers=episode_numbers,
-                    hardlink_base=hardlink_base,
+            # Step 3: Process subtitles once at the end (TV only)
+            if media_type == MediaType.TV and save_path is not None:
+                await self._process_subtitles(
                     download_id=download_id,
-                )
-            else:
-                await self._handle_movie_grab(
-                    files_on_disk=files_on_disk,
                     save_path=save_path,
-                    movie_title=movie_title or "Unknown",
-                    year=year,
+                    video_mappings=all_video_mappings,
+                    series_title=resolved_series,
                     hardlink_base=hardlink_base,
                 )
 
@@ -169,6 +254,7 @@ class MediaHandlerService:
                 "Grab event processing completed",
                 title=title_label,
                 media_type=media_type.value,
+                total_hardlinked=len(hardlinked),
             )
 
         except Exception as e:
@@ -188,8 +274,11 @@ class MediaHandlerService:
         episode_numbers: list[int] | None,
         hardlink_base: Path,
         download_id: str,
-    ) -> None:
-        """Handle TV grab: LLM-normalize file names, hardlink flat into {series}/."""
+    ) -> dict[str, str]:
+        """Handle TV grab: LLM-normalize file names, hardlink flat into {series}/.
+
+        Returns the name_mapping (old_name -> new_name) for subtitle accumulation.
+        """
         # 1. Get video files only
         video_files = [f for f in files_on_disk if f.suffix.lower() in VIDEO_EXTENSIONS]
         video_names = [f.name for f in video_files]
@@ -218,22 +307,13 @@ class MediaHandlerService:
 
         logger.info("Computed TV hardlink pairs", pair_count=len(pairs))
 
-        # 4. Create hardlinks (TV: extension filter applied)
+        # 4. Create hardlinks
         result = self._hardlink_service.create_hardlinks(pairs, filter_extensions=False)
         if result.errors:
             logger.error("TV hardlink creation failed", errors=len(result.errors))
-            return
 
         logger.info("TV hardlinks created", created=len(result.created))
-
-        # 5. Process subtitles with LLM normalization
-        await self._process_subtitles(
-            download_id=download_id,
-            save_path=save_path,
-            video_mappings=name_mapping,
-            series_title=series_title,
-            hardlink_base=hardlink_base,
-        )
+        return name_mapping
 
     async def _handle_movie_grab(
         self,
@@ -261,127 +341,6 @@ class MediaHandlerService:
             return
 
         logger.info("Movie hardlinks created", created=len(result.created))
-
-    async def _poll_for_files_on_disk(
-        self,
-        download_id: str,
-        original_title: str,
-    ) -> tuple[Path | None, list[Path]]:
-        """Poll qBittorrent for torrent files and verify they exist on disk.
-
-        Uses fast-then-backoff strategy:
-        - 2s intervals for 30s, then 10s intervals up to 10 min total
-        - 2 attempts (retry once after 5-min delay)
-        - qBittorrent API errors count toward timeout
-
-        Returns (save_path, list of verified file paths on disk), or (None, []) on timeout.
-        """
-        for attempt in range(MAX_ATTEMPTS):
-            if attempt > 0:
-                logger.info(
-                    "Retrying file polling after delay",
-                    attempt=attempt + 1,
-                    delay=RETRY_DELAY,
-                )
-                await asyncio.sleep(RETRY_DELAY)
-
-            result = await self._poll_attempt(download_id, original_title)
-            if result[1]:  # files found
-                return result
-
-        logger.error(
-            "All polling attempts exhausted",
-            download_id=download_id,
-            attempts=MAX_ATTEMPTS,
-        )
-        return None, []
-
-    async def _poll_attempt(
-        self,
-        download_id: str,
-        original_title: str,
-    ) -> tuple[Path | None, list[Path]]:
-        """Single polling attempt with fast-then-backoff intervals."""
-        elapsed = 0.0
-
-        while elapsed < MAX_TIMEOUT:
-            interval = FAST_INTERVAL if elapsed < FAST_CUTOFF else SLOW_INTERVAL
-
-            try:
-                async with self._qb_service:
-                    # Get torrent info to check state and save_path
-                    torrent = await self._qb_service.get_torrent_by_hash(download_id)
-                    if not torrent:
-                        logger.debug(
-                            "Torrent not found yet",
-                            download_id=download_id,
-                            elapsed=elapsed,
-                        )
-                        await asyncio.sleep(interval)
-                        elapsed += interval
-                        continue
-
-                    # Skip if still downloading metadata
-                    if torrent.state == "metaDL":
-                        logger.debug(
-                            "Torrent still downloading metadata",
-                            download_id=download_id,
-                            state=torrent.state,
-                            elapsed=elapsed,
-                        )
-                        await asyncio.sleep(interval)
-                        elapsed += interval
-                        continue
-
-                    # Get file list
-                    file_list = await self._qb_service.get_torrent_files(download_id)
-                    if not file_list.files:
-                        logger.debug(
-                            "No files in torrent yet",
-                            download_id=download_id,
-                            elapsed=elapsed,
-                        )
-                        await asyncio.sleep(interval)
-                        elapsed += interval
-                        continue
-
-                    # Check if files exist on disk
-                    # Per research pitfall #4: file.name includes torrent folder prefix
-                    # for multi-file torrents, so use save_path / file.name
-                    save_path = Path(torrent.save_path)
-                    verified_files: list[Path] = []
-
-                    for f in file_list.files:
-                        file_path = save_path / f.name
-                        if file_path.exists():
-                            verified_files.append(file_path)
-
-                    if verified_files:
-                        logger.info(
-                            "Files verified on disk",
-                            count=len(verified_files),
-                            total=len(file_list.files),
-                            elapsed=elapsed,
-                        )
-                        return save_path, verified_files
-
-            except Exception as e:
-                # API errors count toward timeout
-                logger.warning(
-                    "qBittorrent API error during polling",
-                    error=str(e),
-                    elapsed=elapsed,
-                )
-
-            await asyncio.sleep(interval)
-            elapsed += interval
-
-        logger.warning(
-            "Polling attempt timed out",
-            download_id=download_id,
-            elapsed=elapsed,
-        )
-        return None, []
 
     @staticmethod
     def _compute_tv_hardlink_pairs(

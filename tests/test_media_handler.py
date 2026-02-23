@@ -171,9 +171,9 @@ class TestPollTimeout:
     @patch("app.services.media_handler.MAX_TIMEOUT", 0.1)
     @patch("app.services.media_handler.FAST_INTERVAL", 0.02)
     @patch("app.services.media_handler.SLOW_INTERVAL", 0.02)
+    @patch("app.services.media_handler.VERY_SLOW_INTERVAL", 0.02)
     @patch("app.services.media_handler.FAST_CUTOFF", 0.05)
-    @patch("app.services.media_handler.RETRY_DELAY", 0.01)
-    @patch("app.services.media_handler.MAX_ATTEMPTS", 2)
+    @patch("app.services.media_handler.SLOW_CUTOFF", 0.08)
     async def test_poll_timeout_retries(self, tmp_path: Path):
         """When files never appear on disk, polling exhausts both attempts."""
         torrent = _make_torrent(save_path=str(tmp_path))
