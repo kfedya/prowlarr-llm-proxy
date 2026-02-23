@@ -422,6 +422,63 @@ class MediaHandlerService:
         return pairs
 
     @staticmethod
+    def _subtitle_dst_name(sub_name: str, video_mappings: dict[str, str]) -> str:
+        """Compute subtitle destination filename without LLM.
+
+        Strategy:
+        1. Extract episode number from the subtitle bare filename.
+        2. Find normalized video name with the same episode (from video_mappings values).
+        3. Result: "{norm_stem}.{group_folder}.{ext}" — unique per group, named after video.
+        4. Fallback: preserve original torrent-relative path (keeps group dir).
+
+        Examples:
+            sub_name="SovetRomantica/01.ass", video "Show.S01E01.mkv"
+              → "Show.S01E01.SovetRomantica.ass"
+            sub_name="Cqur Far/01.ass", video "Show.S01E01.mkv"
+              → "Show.S01E01.Cqur Far.ass"
+            sub_name="01.ass" (root-level), video "Show.S01E01.mkv"
+              → "Show.S01E01.ass"
+            No video match → "SovetRomantica/01.ass" (preserves group dir)
+        """
+        sub_path = Path(sub_name)
+        sub_stem = sub_path.stem        # e.g. "01"
+        sub_ext = sub_path.suffix       # e.g. ".ass"
+        group_name = sub_path.parent.name  # e.g. "SovetRomantica" or "" if at root
+
+        # Extract episode number from subtitle stem
+        ep_num = MediaHandlerService._extract_episode_number(sub_stem)
+
+        if ep_num is not None and video_mappings:
+            # Find normalized video with matching episode number (SxxEyy pattern)
+            for norm_name in video_mappings.values():
+                m = re.search(r'[Ee](\d{2,3})', Path(norm_name).stem)
+                if m and int(m.group(1)) == ep_num:
+                    norm_stem = Path(norm_name).stem
+                    if group_name:
+                        return f"{norm_stem}.{group_name}{sub_ext}"
+                    return f"{norm_stem}{sub_ext}"
+
+        # Fallback: preserve group directory structure (no collision between groups)
+        return sub_name
+
+    @staticmethod
+    def _extract_episode_number(stem: str) -> int | None:
+        """Extract a single episode number from a filename stem.
+
+        Handles: "01", "E01", "e01", "01v2", " - 01", "_01_".
+        Returns None if ambiguous or not found.
+        """
+        # Bare number or number with version suffix: "01", "01v2", "01 [720p]"
+        m = re.match(r'^[Ee]?(\d{1,3})(?:[vV]\d+)?(?:\s|$|\[|_)', stem)
+        if m:
+            return int(m.group(1))
+        # Preceded by separator: " - 01", "_01_"
+        m = re.search(r'[-_\s](\d{1,3})(?:[vV]\d+)?(?:[-_\s\[]|$)', stem)
+        if m:
+            return int(m.group(1))
+        return None
+
+    @staticmethod
     def _sanitize_title(title: str) -> str:
         """Sanitize a title for use as a filesystem path component.
 
@@ -480,19 +537,8 @@ class MediaHandlerService:
                 count=len(new_subs),
             )
 
-            # Use LLM to match subtitles to video files with normalization
-            # Keys in subtitle_mappings are full torrent-relative paths (e.g. "Group/01.ass")
-            subtitle_mappings: dict[str, str] = {}
-            if video_mappings:
-                try:
-                    subtitle_mappings = await self._subtitle_service.match_subtitles_to_videos(
-                        subtitle_files=new_subs,
-                        video_mappings=video_mappings,
-                    )
-                except Exception as e:
-                    logger.warning("Subtitle LLM matching failed, using original names", error=str(e))
-
-            # Build subtitle hardlink pairs using torrent_name subfolder
+            # Build subtitle hardlink pairs using torrent_name subfolder.
+            # No LLM: derive name from already-normalized video names in video_mappings.
             safe_torrent = MediaHandlerService._sanitize_title(torrent_name)
             subtitle_pairs: list[tuple[Path, Path]] = []
             successfully_hardlinked: list[str] = []
@@ -500,16 +546,8 @@ class MediaHandlerService:
             for sub_name in new_subs:
                 src = save_path / sub_name
                 if src.exists():
-                    # Use LLM mapping (full torrent-relative path as key) or preserve group dir
-                    new_name = subtitle_mappings.get(sub_name, None)
-                    if new_name:
-                        # LLM gave a flat name like "Show.S01E01.rus.SovetRomantica.ass"
-                        dst = hardlink_base / safe_torrent / new_name
-                    else:
-                        # No LLM mapping: preserve group directory for disambiguation.
-                        # e.g. sub_name = "Cqur Far/01.ass" -> dst = hardlinks/{torrent}/Cqur Far/01.ass
-                        # This prevents same-filename collision across subtitle groups.
-                        dst = hardlink_base / safe_torrent / sub_name
+                    dst_name = MediaHandlerService._subtitle_dst_name(sub_name, video_mappings)
+                    dst = hardlink_base / safe_torrent / dst_name
                     subtitle_pairs.append((src, dst))
                     successfully_hardlinked.append(sub_name)
 

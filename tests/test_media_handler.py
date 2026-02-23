@@ -622,3 +622,234 @@ class TestHardlinkFilterExtensions:
 
         assert len(result.created) == 1  # only .mkv
         assert len(result.skipped) == 2  # .nfo and .txt
+
+
+# ---------------------------------------------------------------------------
+# Subtitle naming helpers (unit)
+# ---------------------------------------------------------------------------
+
+
+class TestSubtitleDstName:
+    """_subtitle_dst_name: episode matching + group disambiguation."""
+
+    VIDEO_MAPPINGS = {
+        "[SubsPlease] Kaguya - 01 [1080p].mkv": "Kaguya-sama.S01E01.mkv",
+        "[SubsPlease] Kaguya - 02 [1080p].mkv": "Kaguya-sama.S01E02.mkv",
+    }
+
+    def test_group_subfolder_appended(self):
+        """Subtitle from a group subfolder gets group name appended after norm stem."""
+        result = MediaHandlerService._subtitle_dst_name(
+            "SovetRomantica/01.ass", self.VIDEO_MAPPINGS
+        )
+        assert result == "Kaguya-sama.S01E01.SovetRomantica.ass"
+
+    def test_two_groups_same_episode_no_collision(self):
+        """Two groups with the same episode produce different filenames."""
+        r1 = MediaHandlerService._subtitle_dst_name("SovetRomantica/01.ass", self.VIDEO_MAPPINGS)
+        r2 = MediaHandlerService._subtitle_dst_name("Cqur/01.ass", self.VIDEO_MAPPINGS)
+        assert r1 != r2
+        assert r1 == "Kaguya-sama.S01E01.SovetRomantica.ass"
+        assert r2 == "Kaguya-sama.S01E01.Cqur.ass"
+
+    def test_episode_2_matched_correctly(self):
+        result = MediaHandlerService._subtitle_dst_name("SovetRomantica/02.ass", self.VIDEO_MAPPINGS)
+        assert result == "Kaguya-sama.S01E02.SovetRomantica.ass"
+
+    def test_root_level_sub_no_group_suffix(self):
+        """Subtitle at torrent root (no group folder) gets no extra suffix."""
+        result = MediaHandlerService._subtitle_dst_name("01.ass", self.VIDEO_MAPPINGS)
+        assert result == "Kaguya-sama.S01E01.ass"
+
+    def test_no_match_fallback_preserves_path(self):
+        """When episode number doesn't match any video, original path is preserved."""
+        result = MediaHandlerService._subtitle_dst_name("SovetRomantica/99.ass", self.VIDEO_MAPPINGS)
+        assert result == "SovetRomantica/99.ass"
+
+    def test_empty_mappings_fallback(self):
+        """With no video mappings, always falls back to original path."""
+        result = MediaHandlerService._subtitle_dst_name("SovetRomantica/01.ass", {})
+        assert result == "SovetRomantica/01.ass"
+
+    def test_spaces_in_group_name(self):
+        """Group folder with spaces is preserved in the output name."""
+        result = MediaHandlerService._subtitle_dst_name("Cqur Far/01.ass", self.VIDEO_MAPPINGS)
+        assert result == "Kaguya-sama.S01E01.Cqur Far.ass"
+
+
+class TestExtractEpisodeNumber:
+    """_extract_episode_number: handles common subtitle filename patterns."""
+
+    def test_bare_number(self):
+        assert MediaHandlerService._extract_episode_number("01") == 1
+
+    def test_bare_number_two_digit(self):
+        assert MediaHandlerService._extract_episode_number("12") == 12
+
+    def test_e_prefix(self):
+        assert MediaHandlerService._extract_episode_number("E05") == 5
+
+    def test_version_suffix_ignored(self):
+        assert MediaHandlerService._extract_episode_number("01v2") == 1
+
+    def test_no_number_returns_none(self):
+        assert MediaHandlerService._extract_episode_number("opening") is None
+
+    def test_separator_prefix(self):
+        assert MediaHandlerService._extract_episode_number("_01_") == 1
+
+
+# ---------------------------------------------------------------------------
+# E2E: TV grab with multi-group subtitles (mocked qBit + LLM, real HL + Sub svc)
+# ---------------------------------------------------------------------------
+
+
+class TestSubtitleMultiGroupE2E:
+    """Full handle_grab_event flow: TV + two subtitle groups, no LLM for subs."""
+
+    @pytest.mark.asyncio
+    @patch("app.services.media_handler.asyncio.sleep", new_callable=AsyncMock)
+    async def test_two_groups_two_episodes_no_collision(self, mock_sleep, tmp_path: Path):
+        """
+        Scenario: Kaguya-sama S01 torrent with 2 video files and 2 subtitle groups
+        (SovetRomantica, Cqur), each providing 2 episodes.
+
+        Expected subtitle hardlinks:
+          hardlinks/Kaguya-sama.S01.1080p.BDRip/Kaguya-sama.S01E01.SovetRomantica.ass
+          hardlinks/Kaguya-sama.S01.1080p.BDRip/Kaguya-sama.S01E02.SovetRomantica.ass
+          hardlinks/Kaguya-sama.S01.1080p.BDRip/Kaguya-sama.S01E01.Cqur.ass
+          hardlinks/Kaguya-sama.S01.1080p.BDRip/Kaguya-sama.S01E02.Cqur.ass
+        """
+        from app.services.hardlink import HardlinkService
+        from app.services.subtitle import SubtitleService
+
+        # --- file system ---
+        save_path = tmp_path / "downloads"
+        save_path.mkdir()
+        hardlink_base = tmp_path / "hardlinks"
+        hardlink_base.mkdir()
+
+        v1 = save_path / "[SubsPlease] Kaguya-sama - 01 [1080p].mkv"
+        v2 = save_path / "[SubsPlease] Kaguya-sama - 02 [1080p].mkv"
+        v1.write_bytes(b"video1")
+        v2.write_bytes(b"video2")
+
+        for group in ["SovetRomantica", "Cqur"]:
+            (save_path / group).mkdir()
+            for ep in ["01", "02"]:
+                (save_path / group / f"{ep}.ass").write_bytes(b"sub")
+
+        # --- qBittorrent mock ---
+        torrent = _make_torrent(save_path=str(save_path))
+        torrent.name = "Kaguya-sama.S01.1080p.BDRip"
+
+        all_file_names = [
+            "[SubsPlease] Kaguya-sama - 01 [1080p].mkv",
+            "[SubsPlease] Kaguya-sama - 02 [1080p].mkv",
+            "SovetRomantica/01.ass",
+            "SovetRomantica/02.ass",
+            "Cqur/01.ass",
+            "Cqur/02.ass",
+        ]
+        file_list = _make_file_list(all_file_names)
+
+        # --- LLM mock: normalizes video names only ---
+        mock_llm = AsyncMock()
+        mock_llm.normalize_file_names.return_value = {
+            "[SubsPlease] Kaguya-sama - 01 [1080p].mkv": "Kaguya-sama.S01E01.mkv",
+            "[SubsPlease] Kaguya-sama - 02 [1080p].mkv": "Kaguya-sama.S01E02.mkv",
+        }
+
+        # --- services ---
+        svc, mocks = _make_service(
+            tmp_path,
+            mapping_return=_make_mapping(),
+            torrent_return=torrent,
+            file_list_return=file_list,
+            hardlink_path=hardlink_base,
+        )
+        # Swap in real HardlinkService and SubtitleService (no LLM)
+        svc._hardlink_service = HardlinkService(
+            download_path=save_path, hardlinks_path=hardlink_base
+        )
+        svc._subtitle_service = SubtitleService(llm_service=None)
+        svc._llm_service = mock_llm
+
+        # --- run ---
+        await svc.handle_grab_event(
+            release_title="Kaguya-sama.S01.1080p.BDRip",
+            download_id="abc123",
+            media_type=MediaType.TV,
+            series_title="Kaguya-sama: Love Is War",
+            season_number=1,
+            episode_numbers=[1, 2],
+        )
+
+        torrent_dir = hardlink_base / "Kaguya-sama.S01.1080p.BDRip"
+
+        # --- video hardlinks ---
+        assert (torrent_dir / "Kaguya-sama.S01E01.mkv").exists(), "video ep1 missing"
+        assert (torrent_dir / "Kaguya-sama.S01E02.mkv").exists(), "video ep2 missing"
+
+        # --- subtitle hardlinks: 4 files, 2 groups × 2 episodes ---
+        assert (torrent_dir / "Kaguya-sama.S01E01.SovetRomantica.ass").exists(), "SR ep1 missing"
+        assert (torrent_dir / "Kaguya-sama.S01E02.SovetRomantica.ass").exists(), "SR ep2 missing"
+        assert (torrent_dir / "Kaguya-sama.S01E01.Cqur.ass").exists(), "Cqur ep1 missing"
+        assert (torrent_dir / "Kaguya-sama.S01E02.Cqur.ass").exists(), "Cqur ep2 missing"
+
+        # --- no collision: all 4 subtitle files are distinct ---
+        sub_files = list(torrent_dir.glob("*.ass"))
+        assert len(sub_files) == 4, f"Expected 4 subtitle files, got: {[f.name for f in sub_files]}"
+
+        # --- LLM was NOT called for subtitles ---
+        mock_llm.normalize_subtitle_names.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.services.media_handler.asyncio.sleep", new_callable=AsyncMock)
+    async def test_fallback_when_no_video_mappings(self, mock_sleep, tmp_path: Path):
+        """When LLM returns no video mappings, subtitle falls back to group dir structure."""
+        from app.services.hardlink import HardlinkService
+        from app.services.subtitle import SubtitleService
+
+        save_path = tmp_path / "downloads"
+        save_path.mkdir()
+        hardlink_base = tmp_path / "hardlinks"
+        hardlink_base.mkdir()
+
+        (save_path / "ep.mkv").write_bytes(b"video")
+        (save_path / "SubGroup").mkdir()
+        (save_path / "SubGroup" / "01.ass").write_bytes(b"sub")
+
+        torrent = _make_torrent(save_path=str(save_path))
+        torrent.name = "Show.S01"
+        file_list = _make_file_list(["ep.mkv", "SubGroup/01.ass"])
+
+        # LLM returns empty (simulates failure / no normalization)
+        mock_llm = AsyncMock()
+        mock_llm.normalize_file_names.return_value = {}
+
+        svc, mocks = _make_service(
+            tmp_path,
+            mapping_return=_make_mapping(),
+            torrent_return=torrent,
+            file_list_return=file_list,
+            hardlink_path=hardlink_base,
+        )
+        svc._hardlink_service = HardlinkService(
+            download_path=save_path, hardlinks_path=hardlink_base
+        )
+        svc._subtitle_service = SubtitleService(llm_service=None)
+        svc._llm_service = mock_llm
+
+        await svc.handle_grab_event(
+            release_title="Show.S01",
+            download_id="abc123",
+            media_type=MediaType.TV,
+            series_title="Show",
+            season_number=1,
+            episode_numbers=[1],
+        )
+
+        torrent_dir = hardlink_base / "Show.S01"
+        # Fallback: group dir structure preserved
+        assert (torrent_dir / "SubGroup" / "01.ass").exists(), "fallback group dir missing"
