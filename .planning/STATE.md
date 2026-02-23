@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Fully automatic pipeline — torrent downloaded → properly named files appear in Sonarr/Radarr library via hardlinks → no manual intervention.
-**Current focus:** Phase 4 - Architecture Refactor
+**Current focus:** Phase 5 - Radarr Webhook and Movie Hardlinks
 
 ## Current Position
 
-Phase: 4 of 5 (Architecture Refactor) - COMPLETE
-Plan: 2 of 2 in current phase (done)
-Status: Phase 4 complete, ready for phase 5
-Last activity: 2026-02-23 — Completed 04-02 (MediaHandlerService orchestrator)
+Phase: 5 of 5 (Radarr Webhook and Movie Hardlinks)
+Plan: 1 of 2 in current phase (done)
+Status: Plan 05-01 complete, ready for 05-02
+Last activity: 2026-02-23 — Completed 05-01 (Radarr webhook and library-path hardlinks)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -41,6 +41,7 @@ Progress: [████████░░] 80%
 | Phase 03-hardlinkservice P01 | 2min | 2 tasks | 2 files |
 | Phase 04 P01 | 2min | 2 tasks | 4 files |
 | Phase 04 P02 | 4min | 3 tasks | 4 files |
+| Phase 05 P01 | 5min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - [Phase 03-01]: Used os.link(src, dst) over Path.hardlink_to; frozenset ALLOWED_EXTENSIONS; continue+report partial failure; constructor-time cross-device validation
 - [Phase 04-01]: SubtitleService uses frozenset for SUBTITLE_EXTENSIONS; hardlink_path defaults only when use_new_handler=True
 - [Phase 04-02]: HardlinkService wrapped in factory function for dev/CI compatibility; subtitle hardlinks in same subfolder as video; polling returns empty list on timeout
+- [Phase 05-01]: No feature flag for Radarr endpoint -- direct to MediaHandlerService; no rescan API call (hardlinks fill in-place)
+- [Phase 05-01]: TV nested subfolder format {Title}/Season {NN}; movies hardlink ALL files (filter_extensions=False); _sanitize_title for filesystem-safe paths
 
 ### Pending Todos
 
@@ -81,5 +84,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 04-02-PLAN.md (MediaHandlerService orchestrator)
+Stopped at: Completed 05-01-PLAN.md (Radarr webhook and library-path hardlinks)
 Resume file: None

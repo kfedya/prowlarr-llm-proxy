@@ -17,8 +17,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Hardlink File Management
 
 - [x] **HDLK-01**: HardlinkService creates hardlinks from download dir to library dir using pathlib
-- [ ] **HDLK-02**: Hardlinks follow Sonarr folder structure: {library}/{series}/Season {N}/{file}
-- [ ] **HDLK-03**: Hardlinks follow Radarr folder structure: {library}/{movie} ({year})/{file}
+- [x] **HDLK-02**: Hardlinks follow Sonarr folder structure: {library}/{series}/Season {N}/{file}
+- [x] **HDLK-03**: Hardlinks follow Radarr folder structure: {library}/{movie} ({year})/{file}
 - [x] **HDLK-04**: Startup validation checks source and target dirs are on the same filesystem
 - [ ] **HDLK-05**: Subtitle files are hardlinked alongside video files with correct naming
 - [x] **HDLK-06**: Original torrent files remain untouched in qBittorrent download dir for seeding
@@ -27,9 +27,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Webhook Processing
 
 - [x] **WHOK-01**: Sonarr Grab webhook triggers hardlink creation instead of qBittorrent file renaming
-- [ ] **WHOK-02**: Radarr Grab webhook endpoint exists at POST /webhook/radarr/grab
-- [ ] **WHOK-03**: Radarr Grab webhook triggers hardlink creation for movie files
-- [ ] **WHOK-04**: RadarrGrabWebhook Pydantic model validates Radarr webhook payloads
+- [x] **WHOK-02**: Radarr Grab webhook endpoint exists at POST /webhook/radarr/grab
+- [x] **WHOK-03**: Radarr Grab webhook triggers hardlink creation for movie files
+- [x] **WHOK-04**: RadarrGrabWebhook Pydantic model validates Radarr webhook payloads
 - [x] **WHOK-05**: Hardlink creation triggers after torrent metadata resolves and files are created in qBittorrent (polling qBit API for file list)
 - [ ] **WHOK-06**: Sonarr RescanSeries API called after torrent download completes to ensure Sonarr imports files
 - [ ] **WHOK-07**: Radarr RescanMovie API called after torrent download completes to ensure Radarr imports files
@@ -91,12 +91,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ARCH-02 | Phase 4 | Complete |
 | ARCH-03 | Phase 4 | Complete |
 | WHOK-01 | Phase 4 | Complete |
-| HDLK-02 | Phase 5 | Pending |
-| HDLK-03 | Phase 5 | Pending |
+| HDLK-02 | Phase 5 | Complete |
+| HDLK-03 | Phase 5 | Complete |
 | HDLK-05 | Phase 5 | Pending |
-| WHOK-02 | Phase 5 | Pending |
-| WHOK-03 | Phase 5 | Pending |
-| WHOK-04 | Phase 5 | Pending |
+| WHOK-02 | Phase 5 | Complete |
+| WHOK-03 | Phase 5 | Complete |
+| WHOK-04 | Phase 5 | Complete |
 | WHOK-05 | Phase 4 | Complete |
 | WHOK-06 | Phase 4 | Pending |
 | WHOK-07 | Phase 5 | Pending |

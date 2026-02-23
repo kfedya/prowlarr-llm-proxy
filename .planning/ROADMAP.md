@@ -97,7 +97,10 @@ Plans:
   4. After a Sonarr grab event, a hardlink appears in the Sonarr library at `{SONARR_LIBRARY_PATH}/{Series}/Season {N}/`
   5. Subtitle files are hardlinked alongside their video files with correct language suffix naming
   6. Sonarr and Radarr webhook flows are independent — a failure in one does not affect processing of the other
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 05-01-PLAN.md -- Radarr webhook model + endpoint + library-path-aware hardlinks + movie behavior
+- [ ] 05-02-PLAN.md -- Subtitle language detection for TV (ISO 639-2 renaming)
 
 ## Progress
 
