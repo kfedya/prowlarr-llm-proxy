@@ -206,6 +206,7 @@ class MediaHandlerService:
                                     movie_title=resolved_movie,
                                     year=year,
                                     hardlink_base=hardlink_base,
+                                    total_files=total_expected,
                                 )
                             hardlinked.update(new_files)
 
@@ -322,6 +323,7 @@ class MediaHandlerService:
         movie_title: str,
         year: int | None,
         hardlink_base: Path,
+        total_files: int = 1,
     ) -> None:
         """Handle movie grab: preserve torrent-relative structure under {Movie (Year)}/."""
         pairs = self._compute_movie_hardlink_pairs(
@@ -330,6 +332,7 @@ class MediaHandlerService:
             movie_title=movie_title,
             year=year,
             hardlink_base=hardlink_base,
+            total_files=total_files,
         )
 
         logger.info("Computed movie hardlink pairs", pair_count=len(pairs))
@@ -369,13 +372,14 @@ class MediaHandlerService:
         movie_title: str,
         year: int | None,
         hardlink_base: Path,
+        total_files: int = 1,
     ) -> list[tuple[Path, Path]]:
         """Compute (src, dst) hardlink pairs for movie files.
 
-        Single file: hardlink_base/{filename} (no wrapper folder).
-        Multi-file: hardlink_base/{Movie (Year)}/{torrent-relative path}.
+        Single-file torrent (total_files==1): hardlink_base/{filename} (no wrapper folder).
+        Multi-file torrent: hardlink_base/{Movie (Year)}/{torrent-relative path}.
         """
-        if len(files_on_disk) == 1:
+        if total_files == 1:
             src = files_on_disk[0]
             dst = hardlink_base / src.name
             return [(src, dst)]

@@ -271,7 +271,7 @@ class TestComputeMovieHardlinkPairs:
     """Movie hardlink pair computation — preserve torrent-relative structure."""
 
     def test_single_file_torrent(self, tmp_path: Path):
-        """Single file: hardlink directly in hardlink_base, no wrapper folder."""
+        """Single-file torrent (total_files=1): hardlink flat in hardlink_base, no wrapper folder."""
         save_path = tmp_path / "downloads"
         save_path.mkdir()
         src = save_path / "Movie.2024.mkv"
@@ -283,6 +283,7 @@ class TestComputeMovieHardlinkPairs:
             movie_title="Cool Movie",
             year=2024,
             hardlink_base=hardlink_base,
+            total_files=1,
         )
 
         assert len(pairs) == 1
@@ -306,6 +307,7 @@ class TestComputeMovieHardlinkPairs:
             movie_title="Movie",
             year=2024,
             hardlink_base=hardlink_base,
+            total_files=2,
         )
 
         assert len(pairs) == 2
@@ -314,7 +316,7 @@ class TestComputeMovieHardlinkPairs:
         assert hardlink_base / "Movie (2024)" / "Movie.2024.BluRay" / "extras" / "making-of.mkv" in dsts
 
     def test_no_year(self, tmp_path: Path):
-        """Single file without year: still placed flat in hardlink_base."""
+        """Single-file torrent without year: placed flat in hardlink_base."""
         save_path = tmp_path / "downloads"
         save_path.mkdir()
         src = save_path / "Movie.mkv"
@@ -326,13 +328,14 @@ class TestComputeMovieHardlinkPairs:
             movie_title="Cool Movie",
             year=None,
             hardlink_base=hardlink_base,
+            total_files=1,
         )
 
         _, dst = pairs[0]
         assert dst == hardlink_base / "Movie.mkv"
 
     def test_sanitizes_movie_title_multi_file(self, tmp_path: Path):
-        """Multi-file: movie titles with unsafe chars are sanitized in folder name."""
+        """Multi-file torrent: movie titles with unsafe chars are sanitized in folder name."""
         save_path = tmp_path / "downloads"
         torrent_dir = save_path / "Movie.Revenge.2024"
         torrent_dir.mkdir(parents=True)
@@ -346,6 +349,7 @@ class TestComputeMovieHardlinkPairs:
             movie_title="Movie: Revenge",
             year=2024,
             hardlink_base=hardlink_base,
+            total_files=2,
         )
 
         dsts = [str(dst) for _, dst in pairs]
