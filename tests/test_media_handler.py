@@ -698,6 +698,30 @@ class TestExtractEpisodeNumber:
     def test_separator_prefix(self):
         assert MediaHandlerService._extract_episode_number("_01_") == 1
 
+    def test_sxxeyy_with_trailing_number_in_title(self):
+        # "Turning Point 1" must not override episode 8 from S01E08.
+        assert (
+            MediaHandlerService._extract_episode_number("S01E08-Turning Point 1") == 8
+        )
+
+    def test_sxxeyy_lowercase(self):
+        assert MediaHandlerService._extract_episode_number("s02e14-Wedding") == 14
+
+    def test_sxxeyy_with_version(self):
+        assert MediaHandlerService._extract_episode_number("S01E03v2-Title") == 3
+
+    def test_leading_number_with_dot(self):
+        # RuTracker pack pattern: "12. The Woman with the Demon Eyes"
+        assert (
+            MediaHandlerService._extract_episode_number(
+                "12. The Woman with the Demon Eyes"
+            )
+            == 12
+        )
+
+    def test_leading_number_with_dot_three_digits(self):
+        assert MediaHandlerService._extract_episode_number("123. Long Title") == 123
+
 
 # ---------------------------------------------------------------------------
 # E2E: TV grab with multi-group subtitles (mocked qBit + LLM, real HL + Sub svc)

@@ -465,11 +465,18 @@ class MediaHandlerService:
     def _extract_episode_number(stem: str) -> int | None:
         """Extract a single episode number from a filename stem.
 
-        Handles: "01", "E01", "e01", "01v2", " - 01", "_01_".
+        Handles: "S01E08-Title", "12. Title", "01", "E01", "e01", "01v2",
+        " - 01", "_01_".
         Returns None if ambiguous or not found.
         """
-        # Bare number or number with version suffix: "01", "01v2", "01 [720p]"
-        m = re.match(r'^[Ee]?(\d{1,3})(?:[vV]\d+)?(?:\s|$|\[|_)', stem)
+        # SxxEyy wins. Without this, "S01E08-Turning Point 1" matches the trailing
+        # "1" via the generic regex below and reports episode 1 instead of 8.
+        m = re.search(r'[Ss]\d{1,2}[Ee](\d{1,3})(?:[vV]\d+)?', stem)
+        if m:
+            return int(m.group(1))
+        # Bare leading number followed by separator, including "."
+        # ("12. Title", "01", "01v2", "01 [720p]", "01_extra").
+        m = re.match(r'^[Ee]?(\d{1,3})(?:[vV]\d+)?(?:\s|$|\[|_|\.)', stem)
         if m:
             return int(m.group(1))
         # Preceded by separator: " - 01", "_01_"
