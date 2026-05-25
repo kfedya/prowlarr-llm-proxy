@@ -35,8 +35,10 @@ docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
   --env-file "$ENV_FILE" \
+  -v /mnt/user/data:/data \
   -p 8585:8585 \
   -p 8586:8586 \
+  -p 8587:8587 \
   "$IMAGE_NAME"
 
 echo "==> Done!"

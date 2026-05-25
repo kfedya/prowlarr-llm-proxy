@@ -50,3 +50,13 @@ htmlcov/
 # mypy
 .mypy_cache/
 
+# Development scratch files
+/test_*.py
+/test_*.sh
+/test_*.json
+/fix_*.py
+/list_*.py
+
+# Planning docs (local-only)
+.planning/
+

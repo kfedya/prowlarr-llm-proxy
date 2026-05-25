@@ -1,11 +1,18 @@
 """Service for storing and retrieving torrent title mappings."""
 import json
 from datetime import datetime, timedelta
+from enum import Enum
 from typing import Any
 
 import redis.asyncio as redis
 import structlog
 from pydantic import BaseModel, Field
+
+
+class MediaType(str, Enum):
+    """Media type discriminator for TV vs movie content."""
+    TV = "tv"
+    MOVIE = "movie"
 
 logger = structlog.get_logger(__name__)
 
@@ -21,6 +28,8 @@ class TorrentMapping(BaseModel):
     category: str = Field(default="", description="Category ID")
     size: int = Field(default=0, description="Torrent size in bytes")
     download_url: str = Field(default="", description="Download URL or magnet link")
+    media_type: MediaType = Field(default=MediaType.TV, description="Media type (tv or movie)")
+    file_count: int = Field(default=0, description="Number of files in torrent (0 = unknown)")
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
@@ -56,9 +65,11 @@ class TorrentMappingService:
         category: str = "",
         size: int = 0,
         download_url: str = "",
+        media_type: MediaType = MediaType.TV,
+        file_count: int = 0,
     ) -> None:
         """Store a torrent mapping.
-        
+
         Args:
             normalized_title: Normalized title sent to Sonarr
             original_title: Original title from indexer
@@ -68,6 +79,8 @@ class TorrentMappingService:
             category: Category ID
             size: Torrent size in bytes
             download_url: Download URL or magnet
+            media_type: Media type discriminator (tv or movie)
+            file_count: Number of files in torrent
         """
         mapping = TorrentMapping(
             original_title=original_title,
@@ -78,6 +91,8 @@ class TorrentMappingService:
             category=category,
             size=size,
             download_url=download_url,
+            media_type=media_type,
+            file_count=file_count,
         )
         
         # Store by normalized title (primary key for webhook lookup)
@@ -282,27 +297,40 @@ class TorrentMappingService:
             logger.error("Failed to get stats", error=str(e))
             return {"error": str(e)}
     
-    def _make_normalized_cache_key(self, original_title: str, series_name: str) -> str:
-        """Create Redis key for normalized title cache."""
-        cache_key = f"{original_title}|{series_name}"
+    def _make_normalized_cache_key(
+        self,
+        original_title: str,
+        series_name: str,
+        media_type: str = "tv",
+    ) -> str:
+        """Create Redis key for normalized title cache.
+
+        Args:
+            original_title: Original torrent title
+            series_name: Series/movie name from search
+            media_type: Media type string ("tv" or "movie") for key isolation
+        """
+        cache_key = f"{media_type}|{original_title}|{series_name}"
         return f"torrent:normalized:{cache_key}"
-    
+
     async def store_normalized_cache(
         self,
         original_title: str,
         series_name: str,
         normalized_title: str,
+        media_type: str = "tv",
     ) -> None:
         """Store normalized title in cache.
-        
+
         Args:
             original_title: Original torrent title
-            series_name: Series name from search
+            series_name: Series/movie name from search
             normalized_title: Normalized title from LLM
+            media_type: Media type string ("tv" or "movie")
         """
-        key = self._make_normalized_cache_key(original_title, series_name)
+        key = self._make_normalized_cache_key(original_title, series_name, media_type)
         ttl_seconds = int(self._ttl.total_seconds())
-        
+
         try:
             await self._redis.setex(key, ttl_seconds, normalized_title)
             logger.debug(
@@ -310,6 +338,7 @@ class TorrentMappingService:
                 original=original_title[:50],
                 normalized=normalized_title[:50],
                 series=series_name,
+                media_type=media_type,
             )
         except Exception as e:
             logger.warning(
@@ -317,22 +346,24 @@ class TorrentMappingService:
                 error=str(e),
                 original=original_title[:50],
             )
-    
+
     async def get_normalized_cache(
         self,
         original_title: str,
         series_name: str,
+        media_type: str = "tv",
     ) -> str | None:
         """Get normalized title from cache.
-        
+
         Args:
             original_title: Original torrent title
-            series_name: Series name from search
-            
+            series_name: Series/movie name from search
+            media_type: Media type string ("tv" or "movie")
+
         Returns:
             Normalized title if cached, None otherwise
         """
-        key = self._make_normalized_cache_key(original_title, series_name)
+        key = self._make_normalized_cache_key(original_title, series_name, media_type)
         
         try:
             result = await self._redis.get(key)

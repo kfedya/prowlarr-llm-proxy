@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -20,6 +22,14 @@ class Settings(BaseSettings):
     # Fallback for single-port mode
     port: int = Field(default=8080, description="Port to listen on")
     upstream_url: str = Field(default="http://localhost:8989", description="Upstream URL")
+
+    # Port-to-media-type mapping: JSON mapping of port -> media type
+    # Example: {"8587": "movie"} — forces all searches on port 8587 to use movie prompt
+    # Ports not listed default to media type detection from Torznab t= parameter
+    port_media_types: str = Field(
+        default="{}",
+        description="JSON mapping of listen ports to media types (movie/tv)",
+    )
 
     # Proxy settings
     proxy_timeout: float = Field(default=60.0, description="Proxy request timeout in seconds")
@@ -43,11 +53,43 @@ class Settings(BaseSettings):
     redis_password: str = Field(default="", description="Redis password (if required)")
     redis_ttl_hours: int = Field(default=48, description="TTL for cached mappings in hours")
 
+    # Path settings
+    download_path: Path = Field(default=Path("/downloads"), description="qBittorrent download directory")
+
+    # New handler settings
+    use_new_handler: bool = Field(default=False, description="Use new MediaHandlerService instead of SonarrHandlerService")
+    hardlink_path: Path | None = Field(
+        default=None,
+        description="Hardlink staging directory. Defaults to {download_path}/hardlinks when USE_NEW_HANDLER=true."
+    )
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> "Settings":
+        """Validate configured paths exist. Skip defaults that don't exist (dev/CI)."""
+        if self.download_path != Path("/downloads") and not self.download_path.exists():
+            raise ValueError(f"DOWNLOAD_PATH does not exist: {self.download_path}")
+        # Default hardlink_path when use_new_handler is enabled
+        if self.hardlink_path is None and self.use_new_handler:
+            self.hardlink_path = self.download_path / "hardlinks"
+        if self.hardlink_path is not None and not self.hardlink_path.exists():
+            raise ValueError(f"HARDLINK_PATH does not exist: {self.hardlink_path}")
+        return self
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
+    def get_port_media_types(self) -> dict[int, str]:
+        """Parse port_media_types JSON into dict of port -> media type string."""
+        try:
+            mapping = json.loads(self.port_media_types)
+            if mapping:
+                return {int(k): v for k, v in mapping.items()}
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return {}
 
     def get_routes(self) -> dict[int, str]:
         """Parse routes JSON into dict of port -> upstream URL."""
